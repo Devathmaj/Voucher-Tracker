@@ -13,7 +13,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from voucherbot.config.settings import settings
 from voucherbot.models.base import Base
-from voucherbot.models.reddit import Subreddit, RedditKeyword, RedditPost, RedditAiAnalysis, RedditNotification
+from voucherbot.models.source import Source
+from voucherbot.models.post import Post
+from voucherbot.models.keyword import Keyword
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
