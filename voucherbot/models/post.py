@@ -36,6 +36,7 @@ class Post(Base):
     status: Mapped[PostStatus] = mapped_column(Enum(PostStatus), default=PostStatus.NEW, index=True)
     score: Mapped[int] = mapped_column(Integer, default=0)
     raw_data: Mapped[Optional[Any]] = mapped_column(JSONB)
+    ai_result: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

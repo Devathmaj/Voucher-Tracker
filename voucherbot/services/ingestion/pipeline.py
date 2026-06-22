@@ -18,6 +18,7 @@ from voucherbot.models.post import Post, PostStatus
 from voucherbot.models.keyword import Keyword
 from voucherbot.providers.base import BaseCollector, NormalizedPost
 from voucherbot.config.settings import settings
+from voucherbot.services.ai.analyzer import analyze_post
 
 logger = structlog.get_logger(__name__)
 
@@ -48,7 +49,7 @@ async def run_pipeline(
     kw_result = await db.execute(select(Keyword).where(Keyword.enabled == True))
     keywords: list[Keyword] = kw_result.scalars().all()
 
-    stats = {"sources": len(sources), "fetched": 0, "new": 0, "duplicates": 0, "queued": 0, "filtered": 0, "errors": 0}
+    stats = {"sources": len(sources), "fetched": 0, "new": 0, "duplicates": 0, "queued": 0, "filtered": 0, "ai_analyzed": 0, "errors": 0}
     semaphore = asyncio.Semaphore(settings.reddit_concurrency_limit)
 
     async def process_source(source: Source):
@@ -97,7 +98,7 @@ async def _process_one_source(
     keywords: list[Keyword],
     fetch_limit: int,
 ) -> dict:
-    stats = {"fetched": 0, "new": 0, "duplicates": 0, "queued": 0, "filtered": 0}
+    stats = {"fetched": 0, "new": 0, "duplicates": 0, "queued": 0, "filtered": 0, "ai_analyzed": 0}
 
     # 1. Collect
     posts: list[NormalizedPost] = await collector.collect(
@@ -142,6 +143,27 @@ async def _process_one_source(
         else:
             stats["new"] += 1
             stats["queued"] += 1
+
+            # --- AI Analysis ---
+            # Only run for freshly inserted posts to avoid re-analyzing duplicates.
+            ai_result = await analyze_post(title=post.title, content=post.content)
+            if ai_result is not None:
+                # Fetch the newly inserted row so we can update it
+                inserted = await db.execute(
+                    select(Post)
+                    .where(Post.source_id == source.id, Post.external_id == post.external_id)
+                )
+                db_post = inserted.scalars().first()
+                if db_post:
+                    db_post.ai_result = ai_result
+                    db_post.status = PostStatus.PROCESSED
+                    stats["ai_analyzed"] += 1
+                    logger.debug(
+                        "pipeline: ai analysis saved",
+                        post_external_id=post.external_id,
+                        is_voucher=ai_result.get("is_voucher"),
+                        confidence=ai_result.get("confidence"),
+                    )
 
     # 3. Update source last_checked_utc
     source.last_checked_utc = datetime.now(timezone.utc)

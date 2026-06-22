@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     reddit_fetch_interval_minutes: int = 3
     reddit_concurrency_limit: int = 5
     reddit_fetch_limit: int = 25
-    openai_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

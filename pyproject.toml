@@ -20,6 +20,7 @@ dependencies = [
     "feedparser>=6.0.10",
     "beautifulsoup4>=4.12.2",
     "lxml>=4.9.3",
+    "google-generativeai>=0.7.0",
 ]
 
 [project.optional-dependencies]
