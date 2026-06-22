@@ -11,7 +11,11 @@ from voucherbot.models.base import Base
 class SourceType(enum.Enum):
     REDDIT = "REDDIT"
     RSS = "RSS"
+    BLOG = "BLOG"
+    EVENT = "EVENT"
+    FORUM = "FORUM"
     WEBSITE = "WEBSITE"
+    API = "API"
 
 
 class Source(Base):

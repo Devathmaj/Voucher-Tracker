@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
 import structlog
+import httpx
+from lxml import etree
 import feedparser
 import hashlib
 
@@ -32,11 +34,32 @@ class RssCollector(BaseCollector):
             return []
 
         logger.info("RssCollector: fetching", feed_url=feed_url)
-        # feedparser is sync — fine for now as it's not blocking the event loop long
-        feed = feedparser.parse(feed_url)
+        
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+                r = await client.get(feed_url)
+                r.raise_for_status()
+                content = r.content
+        except Exception as e:
+            logger.error("RssCollector: HTTP error", feed_url=feed_url, error=str(e))
+            return []
+
+        # Try to parse with feedparser directly first
+        feed = feedparser.parse(content)
 
         if feed.bozo and not feed.entries:
-            logger.error("RssCollector: failed to parse feed", feed_url=feed_url, error=str(feed.bozo_exception))
+            logger.warning("RssCollector: standard parse failed, attempting lxml recovery", feed_url=feed_url)
+            try:
+                parser = etree.XMLParser(recover=True)
+                root = etree.fromstring(content, parser)
+                repaired_xml = etree.tostring(root)
+                feed = feedparser.parse(repaired_xml)
+            except Exception as e:
+                logger.error("RssCollector: recovery failed", feed_url=feed_url, error=str(e))
+                return []
+
+        if feed.bozo and not feed.entries:
+            logger.error("RssCollector: failed to parse feed even after recovery", feed_url=feed_url, error=str(feed.bozo_exception))
             return []
 
         results: list[NormalizedPost] = []

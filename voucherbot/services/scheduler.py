@@ -23,37 +23,53 @@ logger = structlog.get_logger(__name__)
 scheduler = AsyncIOScheduler()
 _reddit_client = RedditClient()
 
-# One shared instance per provider type
-_reddit_collector = RedditCollector(_reddit_client)
-_rss_collector = RssCollector()
-_web_collector = WebsiteCollector()
+# Shared instances
+_collectors = {
+    "reddit": RedditCollector(_reddit_client),
+    "rss": RssCollector(),
+    "web": WebsiteCollector(),
+}
 
 
-async def _run(source_type: SourceType, collector, fetch_limit: int):
+async def _run(source_type: SourceType, fetch_limit: int = 50):
     async with AsyncSessionLocal() as session:
-        await run_pipeline(session, source_type, collector, fetch_limit=fetch_limit)
+        await run_pipeline(session, source_type, _collectors, fetch_limit=fetch_limit)
 
 
-async def scheduled_reddit_sync():
-    logger.info("Scheduler: triggering Reddit sync")
-    await _run(SourceType.REDDIT, _reddit_collector, fetch_limit=settings.reddit_fetch_limit)
+async def sync_reddit():
+    await _run(SourceType.REDDIT, fetch_limit=settings.reddit_fetch_limit)
 
+async def sync_rss():
+    await _run(SourceType.RSS)
 
-async def scheduled_rss_sync():
-    logger.info("Scheduler: triggering RSS sync")
-    await _run(SourceType.RSS, _rss_collector, fetch_limit=50)
+async def sync_blogs():
+    await _run(SourceType.BLOG)
 
+async def sync_forums():
+    await _run(SourceType.FORUM)
 
-async def scheduled_web_sync():
-    logger.info("Scheduler: triggering Website sync")
-    await _run(SourceType.WEBSITE, _web_collector, fetch_limit=50)
+async def sync_events():
+    await _run(SourceType.EVENT)
 
 
 def start_scheduler():
     logger.info("Starting scheduler")
-    scheduler.add_job(scheduled_reddit_sync, IntervalTrigger(minutes=15), id="reddit_sync", replace_existing=True)
-    scheduler.add_job(scheduled_rss_sync,    IntervalTrigger(minutes=30), id="rss_sync",    replace_existing=True)
-    scheduler.add_job(scheduled_web_sync,    IntervalTrigger(hours=6),    id="web_sync",    replace_existing=True)
+    
+    # Reddit: 15 min
+    scheduler.add_job(sync_reddit, IntervalTrigger(minutes=15), id="sync_reddit", replace_existing=True)
+    
+    # RSS: 30 min
+    scheduler.add_job(sync_rss, IntervalTrigger(minutes=30), id="sync_rss", replace_existing=True)
+    
+    # Blogs: 1 hour
+    scheduler.add_job(sync_blogs, IntervalTrigger(hours=1), id="sync_blogs", replace_existing=True)
+    
+    # Forums: 2 hours
+    scheduler.add_job(sync_forums, IntervalTrigger(hours=2), id="sync_forums", replace_existing=True)
+    
+    # Vendor event pages: 6 hours
+    scheduler.add_job(sync_events, IntervalTrigger(hours=6), id="sync_events", replace_existing=True)
+    
     scheduler.start()
 
 

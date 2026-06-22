@@ -7,7 +7,6 @@ is provider-agnostic and reused across Reddit, RSS, and Website sources.
 import asyncio
 import uuid
 from datetime import datetime, timezone
-from typing import Type
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,12 +28,12 @@ SCORE_THRESHOLD = 1
 async def run_pipeline(
     db: AsyncSession,
     source_type: SourceType,
-    collector: BaseCollector,
+    collectors: dict[str, BaseCollector],
     fetch_limit: int = 25,
 ) -> dict:
     """
     Run the full ingestion pipeline for all enabled sources of a given type.
-    Returns aggregate stats for logging.
+    `collectors` is a dict mapping a string key (e.g., 'rss', 'web', 'reddit') to a BaseCollector.
     """
     sync_id = f"Sync-{str(uuid.uuid4())[:8]}"
     start_time = datetime.now(timezone.utc)
@@ -55,6 +54,21 @@ async def run_pipeline(
     async def process_source(source: Source):
         async with semaphore:
             try:
+                # Determine the correct collector based on config structure
+                config = source.config or {}
+                collector = None
+                if source.type == SourceType.REDDIT:
+                    collector = collectors.get("reddit")
+                elif "feed_url" in config:
+                    collector = collectors.get("rss")
+                elif "article_selector" in config:
+                    collector = collectors.get("web")
+                
+                if not collector:
+                    logger.error(f"{sync_id} No suitable collector found for {source.name}")
+                    stats["errors"] += 1
+                    return
+
                 s_stats = await _process_one_source(db, source, collector, keywords, fetch_limit)
                 for k, v in s_stats.items():
                     stats[k] += v
@@ -64,7 +78,8 @@ async def run_pipeline(
                 source.error_count += 1
                 await db.commit()
 
-    await asyncio.gather(*[process_source(s) for s in sources])
+    if sources:
+        await asyncio.gather(*[process_source(s) for s in sources])
 
     duration = (datetime.now(timezone.utc) - start_time).total_seconds()
     logger.info(
@@ -98,6 +113,10 @@ async def _process_one_source(
         score = sum(kw.score for kw in keywords if kw.keyword.lower() in text)
         status = PostStatus.QUEUED if score >= SCORE_THRESHOLD else PostStatus.FILTERED
 
+        if status == PostStatus.FILTERED:
+            stats["filtered"] += 1
+            continue
+
         # 2b. Insert with ON CONFLICT DO NOTHING
         stmt = (
             insert(Post)
@@ -122,10 +141,7 @@ async def _process_one_source(
             stats["duplicates"] += 1
         else:
             stats["new"] += 1
-            if status == PostStatus.QUEUED:
-                stats["queued"] += 1
-            else:
-                stats["filtered"] += 1
+            stats["queued"] += 1
 
     # 3. Update source last_checked_utc
     source.last_checked_utc = datetime.now(timezone.utc)
