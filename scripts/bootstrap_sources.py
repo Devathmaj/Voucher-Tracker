@@ -12,6 +12,17 @@ from voucherbot.config.settings import settings
 
 sources = [
     {
+        "name": "MSFT Hub Vouchers",
+        "type": SourceType.WEBSITE,
+        "base_url": "https://msfthub.com/",
+        "config": {
+            "url": "https://msfthub.com/vouchers/",
+            "article_selector": "li",
+            "title_selector": "span",
+            "link_selector": "a"
+        }
+    },
+    {
         "name": "AWS Builder",
         "type": SourceType.RSS,
         "base_url": "https://builder.aws.com/",
