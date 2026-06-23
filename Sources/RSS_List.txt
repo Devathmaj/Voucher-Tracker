@@ -1,0 +1,7 @@
+# Application Database Seed RSS Feeds (from scripts/bootstrap_sources.py)
+1. AWS Builder: https://builder.aws.com/rss.xml
+2. Microsoft Blogs: https://blogs.microsoft.com/feed/
+3. Microsoft Learn Blog: https://techcommunity.microsoft.com/t5/microsoft-learn-blog/bg-p/MicrosoftLearnBlog/rss
+4. Linux.com: https://www.linux.com/feed/
+5. TechExams: https://community.techexams.net/discussions/feed.rss
+6. InfoSec Institute: https://community.infosecinstitute.com/discussions/feed.rss

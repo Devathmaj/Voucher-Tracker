@@ -6,8 +6,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     database_url: str
     
-    # Placeholders for future use
-    smtp_host: Optional[str] = None
+    # Email
+    resend_api_key: Optional[str] = None
+    email_from: str = "VoucherBot <onboarding@resend.dev>"
+    email_id: Optional[str] = None
     reddit_client_id: Optional[str] = None
     reddit_client_secret: Optional[str] = None
     reddit_user_agent: Optional[str] = None
