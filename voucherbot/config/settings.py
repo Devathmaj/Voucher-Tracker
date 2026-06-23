@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     reddit_concurrency_limit: int = 5
     reddit_fetch_limit: int = 25
     gemini_api_key: Optional[str] = None
+    groq_api_key: Optional[str] = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
