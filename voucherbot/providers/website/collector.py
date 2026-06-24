@@ -9,8 +9,13 @@ from voucherbot.providers.base import BaseCollector, NormalizedPost
 
 logger = structlog.get_logger(__name__)
 
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; VoucherBot/0.1; +https://github.com/voucherbot)"
+    "User-Agent": USER_AGENT
 }
 
 
@@ -26,6 +31,13 @@ class WebsiteCollector(BaseCollector):
     """
 
     async def collect(self, source_config: dict[str, Any], limit: int = 50) -> list[NormalizedPost]:
+        if source_config.get("unsupported"):
+            logger.info(
+                "WebsiteCollector: source marked unsupported",
+                reason=source_config.get("unsupported_reason"),
+            )
+            return []
+
         url = source_config.get("url", "")
         article_selector = source_config.get("article_selector", "article")
         title_selector = source_config.get("title_selector", "h2")
@@ -35,9 +47,14 @@ class WebsiteCollector(BaseCollector):
             logger.warning("WebsiteCollector: no url in config", config=source_config)
             return []
 
+        timeout = float(source_config.get("timeout_seconds", 15))
         logger.info("WebsiteCollector: fetching", url=url)
         try:
-            async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True, timeout=15) as client:
+            async with httpx.AsyncClient(
+                headers=HEADERS,
+                follow_redirects=True,
+                timeout=timeout,
+            ) as client:
                 response = await client.get(url)
                 response.raise_for_status()
         except Exception as e:
@@ -52,15 +69,16 @@ class WebsiteCollector(BaseCollector):
         results: list[NormalizedPost] = []
         for article in articles:
             title_el = article.select_one(title_selector)
-            link_el = article.select_one(link_selector)
+            link_el = article if link_selector == "self" else article.select_one(link_selector)
 
             title = title_el.get_text(strip=True) if title_el else ""
+            if not title:
+                title = article.get_text(separator=" ", strip=True)
             href = link_el.get("href", "") if link_el else ""
 
             if not title and not href:
                 continue
 
-            # Resolve relative links
             if href and not href.startswith("http"):
                 from urllib.parse import urljoin
                 href = urljoin(url, href)

@@ -109,6 +109,7 @@ def _feed(
     cadence_minutes: int = 1440,
     priority: int = 1,
     query_terms: list[str] | None = None,
+    note: str | None = None,
 ) -> dict[str, Any]:
     config: dict[str, Any] = {
         "feed_url": feed_url,
@@ -116,6 +117,8 @@ def _feed(
         "query_terms": query_terms or DEFAULT_QUERY_TERMS,
         "poll_interval_minutes": cadence_minutes,
     }
+    if note:
+        config["note"] = note
     return {
         "name": _source_name(source_type, label),
         "type": source_type,
@@ -137,6 +140,7 @@ def _page(
     cadence_minutes: int = 10080,
     priority: int = 1,
     query_terms: list[str] | None = None,
+    note: str | None = None,
 ) -> dict[str, Any]:
     config: dict[str, Any] = {
         "url": url,
@@ -147,6 +151,8 @@ def _page(
         "query_terms": query_terms or DEFAULT_QUERY_TERMS,
         "poll_interval_minutes": cadence_minutes,
     }
+    if note:
+        config["note"] = note
     return {
         "name": _source_name(source_type, label),
         "type": source_type,
@@ -183,14 +189,17 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
     ),
     _feed(
         "Microsoft Learn Blog",
-        "https://techcommunity.microsoft.com/t5/microsoft-learn-blog/bg-p/MicrosoftLearnBlog/rss",
+        (
+            "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/Community"
+            "?interaction.style=blog&labels=Microsoft+Learn+Blog"
+        ),
         SourceType.BLOG,
         vendor="Microsoft",
         cadence_minutes=1440,
     ),
     _feed(
         "Google Cloud Blog",
-        "https://cloud.google.com/blog/rss",
+        "https://cloudblog.withgoogle.com/rss/",
         SourceType.BLOG,
         vendor="Google Cloud",
         cadence_minutes=1440,
@@ -220,7 +229,7 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
     # Community/forum RSS feeds.
     _feed(
         "Microsoft Learn Q&A Voucher Search",
-        "https://learn.microsoft.com/api/search/rss?search=voucher%20certification%20exam",
+        "https://learn.microsoft.com/api/search/rss?search=voucher+certification+exam&locale=en-us",
         SourceType.FORUM,
         vendor="Microsoft",
         cadence_minutes=10080,
@@ -228,36 +237,77 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
     ),
     _feed(
         "Google Cloud Training Group",
-        "https://groups.google.com/g/google-cloud-training/feed/atom_v1_0_msgs.xml",
+        "https://discuss.google.dev/c/google-cloud/cloud-announcements/172.rss",
         SourceType.FORUM,
         vendor="Google Cloud",
         cadence_minutes=10080,
+        note=(
+            "Migrated from Google Groups to discuss.google.dev. "
+            "Category 172 = Cloud Announcements."
+        ),
+    ),
+    _feed(
+        "Microsoft Events",
+        "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=azure-events",
+        SourceType.BLOG,
+        vendor="Microsoft",
+        cadence_minutes=1440,
+        priority=2,
     ),
 
     # Aggregator blogs called out in the report.
     _feed("Tutorials Dojo", "https://tutorialsdojo.com/feed/", SourceType.RSS, vendor="Tutorials Dojo"),
-    _feed("CertMag", "https://certmag.com/feed/", SourceType.RSS, vendor="CertMag"),
     _feed("Packet Pilot", "https://packetpilot.com/feed/", SourceType.RSS, vendor="Packet Pilot"),
-    _feed("Cloud Academy Blog", "https://cloudacademy.com/blog/feed/", SourceType.RSS, vendor="Cloud Academy"),
-    _feed("HackerDNA", "https://hackerdna.com/feed", SourceType.RSS, vendor="HackerDNA"),
+    {
+        "name": "rss:cloud_academy_blog",
+        "type": SourceType.WEBSITE,
+        "base_url": "https://www.pluralsight.com/resources/blog",
+        "priority": 1,
+        "config": {
+            "collector": "website",
+            "url": "https://www.pluralsight.com/resources/blog",
+            "article_selector": "a[href*='/resources/blog/']",
+            "title_selector": "p",
+            "link_selector": "self",
+            "vendor": "Pluralsight",
+            "note": (
+                "No RSS exists. Scrapes blog listing page. Selector may need tuning "
+                "- inspect live page if 0 items returned."
+            ),
+            "query_terms": DEFAULT_QUERY_TERMS,
+            "poll_interval_minutes": 10080,
+        },
+    },
+    _feed(
+        "Microsoft Blog",
+        "https://blogs.microsoft.com/feed",
+        SourceType.RSS,
+        vendor="Microsoft",
+        cadence_minutes=1440,
+    ),
+    _feed(
+        "Cisco Newsroom",
+        "https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json",
+        SourceType.RSS,
+        vendor="Cisco",
+        cadence_minutes=1440,
+    ),
+    _feed(
+        "Cisco Newsroom Security",
+        "https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json?feed=security",
+        SourceType.RSS,
+        vendor="Cisco",
+        cadence_minutes=1440,
+    ),
+    _feed(
+        "Cisco Newsroom Press",
+        "https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json?feed=press-releases",
+        SourceType.RSS,
+        vendor="Cisco",
+        cadence_minutes=1440,
+    ),
 
     # Official vendor/event pages.
-    _page(
-        "Microsoft Build",
-        "https://build.microsoft.com/",
-        SourceType.EVENT,
-        vendor="Microsoft",
-        article_selector="article, .card, .event-card, main section",
-        cadence_minutes=10080,
-    ),
-    _page(
-        "Microsoft Ignite",
-        "https://ignite.microsoft.com/",
-        SourceType.EVENT,
-        vendor="Microsoft",
-        article_selector="article, .card, .event-card, main section",
-        cadence_minutes=10080,
-    ),
     _page(
         "Microsoft Cloud Skills Challenge",
         "https://learn.microsoft.com/training/challenges",
@@ -277,10 +327,11 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
     ),
     _page(
         "AWS reInvent",
-        "https://reinvent.awsevents.com/",
+        "https://aws.amazon.com/events/reinvent/",
         SourceType.EVENT,
         vendor="AWS",
-        article_selector="article, .card, main section",
+        article_selector="main section, main",
+        title_selector="h2, h3",
         cadence_minutes=10080,
     ),
     _page(
@@ -309,17 +360,13 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         cadence_minutes=10080,
     ),
     _page(
-        "Cisco Training Offers",
-        "https://learningnetwork.cisco.com/s/certification-offers",
-        SourceType.WEBSITE,
-        vendor="Cisco",
-        cadence_minutes=10080,
-    ),
-    _page(
         "CompTIA Offers",
-        "https://www.comptia.org/testing/testing-options/vouchers",
+        "https://www.comptia.org/en-us/blog/",
         SourceType.WEBSITE,
         vendor="CompTIA",
+        article_selector="main li",
+        title_selector="a",
+        link_selector="a",
         cadence_minutes=10080,
     ),
     _page(
@@ -329,26 +376,25 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         vendor="ISC2",
         cadence_minutes=10080,
     ),
-    _page(
-        "Oracle University Events",
-        "https://education.oracle.com/events",
-        SourceType.EVENT,
-        vendor="Oracle",
-        article_selector=".event-listing, article, .card, li",
-        cadence_minutes=10080,
-    ),
-    _page(
-        "Oracle University Offers",
-        "https://education.oracle.com/oracle-certification-exam-voucher",
-        SourceType.WEBSITE,
+    _feed(
+        "Oracle University Blog",
+        "https://feeds.libsyn.com/459162/rss",
+        SourceType.BLOG,
         vendor="Oracle",
         cadence_minutes=10080,
+        note=(
+            "Podcast RSS - blog /rss is 403. Podcast actively covers Race to "
+            "Certification and free exam promos."
+        ),
     ),
     _page(
         "Red Hat Training Specials",
-        "https://www.redhat.com/en/services/training-and-certification/offers",
+        "https://www.redhat.com/en/services/training/specials",
         SourceType.WEBSITE,
         vendor="Red Hat",
+        article_selector="article, .card, main section, main li",
+        title_selector="h2, h3, a",
+        link_selector="a",
         cadence_minutes=10080,
     ),
 
