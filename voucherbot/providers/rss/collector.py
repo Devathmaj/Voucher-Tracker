@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
+import json
 import structlog
 import httpx
 from lxml import etree
@@ -44,6 +45,11 @@ class RssCollector(BaseCollector):
             logger.error("RssCollector: HTTP error", feed_url=feed_url, error=str(e))
             return []
 
+        json_results = self._parse_json_feed(content, source_config, limit)
+        if json_results:
+            logger.info("RssCollector: collected JSON feed", feed_url=feed_url, count=len(json_results))
+            return json_results
+
         # Try to parse with feedparser directly first
         feed = feedparser.parse(content)
 
@@ -77,8 +83,57 @@ class RssCollector(BaseCollector):
                 summary=None,
                 author=entry.get("author"),
                 published_at=_parse_date(entry),
-                raw_data={"feed_url": feed_url, "tags": [t.term for t in entry.get("tags", [])]},
+                raw_data={
+                    "feed_url": feed_url,
+                    "vendor": source_config.get("vendor"),
+                    "tags": [t.term for t in entry.get("tags", [])],
+                },
             ))
 
         logger.info("RssCollector: collected", feed_url=feed_url, count=len(results))
+        return results
+
+    def _parse_json_feed(
+        self,
+        content: bytes,
+        source_config: dict[str, Any],
+        limit: int,
+    ) -> list[NormalizedPost]:
+        try:
+            payload = json.loads(content)
+        except Exception:
+            return []
+
+        feed_url = source_config.get("feed_url", "")
+        items = payload.get("items") or payload.get("articles") or payload.get("data") or []
+        if not isinstance(items, list):
+            return []
+
+        results: list[NormalizedPost] = []
+        for item in items[:limit]:
+            if not isinstance(item, dict):
+                continue
+
+            url = item.get("url") or item.get("link") or item.get("canonicalUrl") or ""
+            title = item.get("title") or item.get("headline") or item.get("name") or "(no title)"
+            external_id = str(item.get("id") or item.get("guid") or hashlib.sha1(url.encode()).hexdigest())
+            content_text = item.get("summary") or item.get("description") or item.get("body")
+
+            results.append(
+                NormalizedPost(
+                    external_id=external_id,
+                    url=url or feed_url,
+                    title=title,
+                    content=content_text,
+                    summary=item.get("summary"),
+                    author=item.get("author"),
+                    published_at=None,
+                    raw_data={
+                        "feed_url": feed_url,
+                        "vendor": source_config.get("vendor"),
+                        "format": "json",
+                    },
+                )
+            )
+
         return results

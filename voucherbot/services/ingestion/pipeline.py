@@ -43,13 +43,24 @@ async def run_pipeline(
     result = await db.execute(
         select(Source).where(Source.enabled == True, Source.type == source_type)
     )
-    sources = result.scalars().all()
+    all_sources = result.scalars().all()
+    sources = [source for source in all_sources if _source_due(source)]
 
     # Load enabled keywords with scores
     kw_result = await db.execute(select(Keyword).where(Keyword.enabled == True))
     keywords: list[Keyword] = kw_result.scalars().all()
 
-    stats = {"sources": len(sources), "fetched": 0, "new": 0, "duplicates": 0, "queued": 0, "filtered": 0, "ai_analyzed": 0, "errors": 0}
+    stats = {
+        "sources": len(sources),
+        "skipped": len(all_sources) - len(sources),
+        "fetched": 0,
+        "new": 0,
+        "duplicates": 0,
+        "queued": 0,
+        "filtered": 0,
+        "ai_analyzed": 0,
+        "errors": 0,
+    }
     semaphore = asyncio.Semaphore(settings.reddit_concurrency_limit)
 
     async def process_source(source: Source):
@@ -89,6 +100,27 @@ async def run_pipeline(
         **stats
     )
     return stats
+
+
+def _source_due(source: Source) -> bool:
+    config = source.config or {}
+    interval = config.get("poll_interval_minutes")
+    if not interval or not source.last_checked_utc:
+        return True
+
+    try:
+        interval_minutes = int(interval)
+    except (TypeError, ValueError):
+        logger.warning("pipeline: invalid source poll interval", source=source.name, interval=interval)
+        return True
+
+    now = datetime.now(timezone.utc)
+    last_checked = source.last_checked_utc
+    if last_checked.tzinfo is None:
+        last_checked = last_checked.replace(tzinfo=timezone.utc)
+
+    elapsed_minutes = (now - last_checked).total_seconds() / 60
+    return elapsed_minutes >= interval_minutes
 
 
 async def _process_one_source(

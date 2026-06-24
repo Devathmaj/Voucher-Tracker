@@ -11,6 +11,11 @@ logger = structlog.get_logger(__name__)
 
 class RedditClient:
     def __init__(self) -> None:
+        self.is_configured = bool(
+            settings.reddit_client_id
+            and settings.reddit_client_secret
+            and settings.reddit_user_agent
+        )
         self.reddit = asyncpraw.Reddit(
             client_id=settings.reddit_client_id,
             client_secret=settings.reddit_client_secret,

@@ -1,184 +1,377 @@
 """
-Startup bootstrap: populates sources and keywords tables if empty.
-Uses ON CONFLICT DO NOTHING so re-runs on every startup are safe and instant.
+Startup bootstrap for source and keyword seed data.
+
+The source catalog is intentionally config-driven: collectors read the JSONB
+config, so adding feeds/pages does not require a schema migration.
 """
+from __future__ import annotations
+
+from typing import Any
+
 import structlog
 from sqlalchemy.dialects.postgresql import insert
 
 from voucherbot.database.connection import AsyncSessionLocal
-from voucherbot.models.source import Source, SourceType
 from voucherbot.models.keyword import Keyword
+from voucherbot.models.source import Source, SourceType
 
 logger = structlog.get_logger(__name__)
 
-# ──────────────────────────────────────────────────────────────
-# Keywords with scores
-# ──────────────────────────────────────────────────────────────
+DEFAULT_QUERY_TERMS = [
+    "voucher",
+    "coupon",
+    "promo code",
+    "free exam",
+    "exam voucher",
+    "discount",
+    "100% off",
+    "50% off",
+    "redeem",
+]
+
 KEYWORDS = [
-    # High-value voucher/deal signals
-    {"keyword": "voucher",           "score": 5},
-    {"keyword": "coupon",            "score": 5},
-    {"keyword": "100% off",          "score": 5},
-    {"keyword": "promo code",        "score": 5},
-    {"keyword": "free exam",         "score": 5},
-    {"keyword": "free access",       "score": 4},
-    {"keyword": "discount",          "score": 4},
-    {"keyword": "redeem",            "score": 4},
-    {"keyword": "50% off",           "score": 4},
-    {"keyword": "limited time",      "score": 3},
-    {"keyword": "beta access",       "score": 3},
-    {"keyword": "free tier",         "score": 3},
-    # Event signals
-    {"keyword": "register now",      "score": 1},
-    {"keyword": "webinar",           "score": 1},
-    {"keyword": "virtual event",     "score": 1},
-    {"keyword": "virtual training",  "score": 2},
-    {"keyword": "free training",     "score": 2},
-    {"keyword": "live session",      "score": 1},
-    # General certification/learning signals
-    {"keyword": "certification",     "score": 1},
-    {"keyword": "exam",              "score": 1},
-    {"keyword": "udemy",             "score": 1},
-    {"keyword": "pearsonvue",        "score": 2},
-    {"keyword": "aws",               "score": 1},
-    {"keyword": "azure",             "score": 1},
-    {"keyword": "google cloud",      "score": 1},
+    {"keyword": "voucher", "score": 5},
+    {"keyword": "coupon", "score": 5},
+    {"keyword": "100% off", "score": 5},
+    {"keyword": "promo code", "score": 5},
+    {"keyword": "free exam", "score": 5},
+    {"keyword": "exam voucher", "score": 5},
+    {"keyword": "certification voucher", "score": 5},
+    {"keyword": "free certification", "score": 4},
+    {"keyword": "free access", "score": 4},
+    {"keyword": "discount", "score": 4},
+    {"keyword": "redeem", "score": 4},
+    {"keyword": "50% off", "score": 4},
+    {"keyword": "retake", "score": 3},
+    {"keyword": "safeguard", "score": 3},
+    {"keyword": "limited time", "score": 3},
+    {"keyword": "beta access", "score": 3},
+    {"keyword": "free tier", "score": 3},
+    {"keyword": "cloud skills challenge", "score": 3},
+    {"keyword": "register now", "score": 1},
+    {"keyword": "webinar", "score": 1},
+    {"keyword": "virtual event", "score": 1},
+    {"keyword": "virtual training", "score": 2},
+    {"keyword": "free training", "score": 2},
+    {"keyword": "live session", "score": 1},
+    {"keyword": "certification", "score": 1},
+    {"keyword": "exam", "score": 1},
+    {"keyword": "pearsonvue", "score": 2},
+    {"keyword": "aws", "score": 1},
+    {"keyword": "azure", "score": 1},
+    {"keyword": "google cloud", "score": 1},
+    {"keyword": "cisco", "score": 1},
+    {"keyword": "comptia", "score": 1},
+    {"keyword": "isc2", "score": 1},
+    {"keyword": "oracle", "score": 1},
+    {"keyword": "red hat", "score": 1},
 ]
 
-# ──────────────────────────────────────────────────────────────
-# Reddit sources (one per subreddit)
-# ──────────────────────────────────────────────────────────────
-REDDIT_SUBREDDITS = [
-    "AWSCertifications", "aws", "AzureCertification", "AZURE", "googlecloud",
-    "CompTIA", "ccna", "cissp", "isc2", "kubernetes", "redhat", "LinuxCertifications",
-    "ITCareerQuestions", "sysadmin", "networking", "devops", "docker", "terraform",
-    "selfhosted", "cybersecurity", "netsec", "blueteamsec", "security", "AskNetsec",
-    "oscp", "ethicalhacking", "hacking", "programming", "learnprogramming", "Python",
-    "java", "golang", "javascript", "webdev", "cscareerquestions", "cscareerquestionsEU",
-    "EngineeringStudents", "compsci", "csMajors", "MachineLearning", "artificial",
-    "OpenAI", "LocalLLaMA", "GenAI", "freebies", "deals", "eFreebies", "FREE",
-    "Udemy", "FreeUdemyCoupons", "AmazonWebServices", "MicrosoftLearn",
-    "oracle", "OracleCloud", "google", "linux", "Ubuntu", "Fedora", "ArchLinux",
-    "DataEngineering", "dataengineering", "datascience", "analytics", "database",
-    "PostgreSQL", "mysql", "devsecops", "SRE", "cloud", "cloudcomputing",
-    "learnmachinelearning", "artificialintelligence", "learnpython", "PowerShell",
-    "bash", "git", "github", "vscode", "awsjobs", "AzureJobs", "remotework",
-    "remotejobs", "jobs", "careerguidance", "resumes", "technology", "technews",
-    "opensource", "FOSS", "homelab", "privacy", "InformationTechnology",
-    "learnjava", "learnjavascript", "reactjs", "node", "SQL", "Database",
+HIGH_SIGNAL_REDDIT_SUBREDDITS = [
+    "AWSCertifications",
+    "AzureCertification",
+    "MicrosoftLearn",
+    "CompTIA",
+    "ccna",
+    "cissp",
+    "isc2",
+    "redhat",
+    "LinuxCertifications",
+    "kubernetes",
+    "googlecloud",
+    "OracleCloud",
+    "freebies",
+    "deals",
+    "eFreebies",
+    "FREE",
+    "Udemy",
+    "FreeUdemyCoupons",
 ]
 
-# ──────────────────────────────────────────────────────────────
-# RSS feeds (Blogs, Forums, Aggregators)
-# ──────────────────────────────────────────────────────────────
-RSS_FEEDS = [
-    # Official vendor blogs
-    {"name": "AWS Training Blog",       "type": SourceType.BLOG,  "feed_url": "https://aws.amazon.com/blogs/training-and-certification/feed/"},
-    {"name": "Microsoft Learn Blog",    "type": SourceType.BLOG,  "feed_url": "https://techcommunity.microsoft.com/t5/microsoft-learn-blog/bg-p/MicrosoftLearnBlog/rss"},
-    {"name": "Google Cloud Blog",       "type": SourceType.BLOG,  "feed_url": "https://cloud.google.com/feeds/gcp-release-notes.xml"},
-    {"name": "Cisco Learning Network",  "type": SourceType.BLOG,  "feed_url": "https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json"},
-    {"name": "Linux Foundation Blog",   "type": SourceType.BLOG,  "feed_url": "https://www.linuxfoundation.org/blog/rss.xml"},
-    {"name": "Red Hat Blog",            "type": SourceType.BLOG,  "feed_url": "https://www.redhat.com/en/rss/blog"},
-    
-    # Aggregators and generic tech sites
-    {"name": "Dev.to Certifications",   "type": SourceType.RSS,   "feed_url": "https://dev.to/feed/tag/certification"},
-    {"name": "Dev.to AWS",              "type": SourceType.RSS,   "feed_url": "https://dev.to/feed/tag/aws"},
-    {"name": "Medium Certification",    "type": SourceType.RSS,   "feed_url": "https://medium.com/feed/tag/certification"},
-    {"name": "Hacker News Cert Search", "type": SourceType.RSS,   "feed_url": "https://hnrss.org/newest?q=certification+OR+voucher+OR+free"},
-]
 
-# ──────────────────────────────────────────────────────────────
-# Websites to scrape (Vendor Event Pages and specific forums)
-# ──────────────────────────────────────────────────────────────
-WEBSITES = [
-    # Events
-    {
-        "name": "AWS Events",
-        "type": SourceType.EVENT,
-        "base_url": "https://aws.amazon.com/events/",
-        "config": {
-            "url": "https://aws.amazon.com/events/",
-            "article_selector": ".lb-content-item",
-            "title_selector": "h3",
-            "link_selector": "a",
-        },
-    },
-    {
-        "name": "MS Virtual Training Days",
-        "type": SourceType.EVENT,
-        "base_url": "https://www.microsoft.com/en-us/trainingdays",
-        "config": {
-            "url": "https://www.microsoft.com/en-us/trainingdays",
-            "article_selector": ".event-card",
-            "title_selector": "h3",
-            "link_selector": "a",
-        },
-    },
-    {
-        "name": "Google Cloud Events",
-        "type": SourceType.EVENT,
-        "base_url": "https://cloud.google.com/events",
-        "config": {
-            "url": "https://cloud.google.com/events",
-            "article_selector": ".event-item",
-            "title_selector": "h3",
-            "link_selector": "a",
-        },
-    },
-    {
-        "name": "Oracle Univ Events",
-        "type": SourceType.EVENT,
-        "base_url": "https://education.oracle.com/events",
-        "config": {
-            "url": "https://education.oracle.com/events",
-            "article_selector": ".event-listing",
-            "title_selector": "h3",
-            "link_selector": "a",
-        },
-    },
-    {
-        "name": "Cisco Live",
-        "type": SourceType.EVENT,
-        "base_url": "https://www.ciscolive.com/global.html",
-        "config": {
-            "url": "https://www.ciscolive.com/global.html",
-            "article_selector": ".cmp-teaser",
-            "title_selector": "h2",
-            "link_selector": "a",
-        },
-    },
-    {
-        "name": "Red Hat Events",
-        "type": SourceType.EVENT,
-        "base_url": "https://www.redhat.com/en/events",
-        "config": {
-            "url": "https://www.redhat.com/en/events",
-            "article_selector": ".rh-card",
-            "title_selector": "h3",
-            "link_selector": "a",
-        },
-    },
-    # Forums (if RSS isn't reliable, fallback to scraping)
-    {
-        "name": "MS Tech Community",
-        "type": SourceType.FORUM,
-        "base_url": "https://techcommunity.microsoft.com/",
-        "config": {
-            "url": "https://techcommunity.microsoft.com/t5/custom/page/page-id/Discussions",
-            "article_selector": ".MessageList-item",
-            "title_selector": ".message-subject",
-            "link_selector": ".message-subject a",
-        }
-    },
+def _source_name(source_type: SourceType, label: str) -> str:
+    slug = (
+        label.lower()
+        .replace("&", "and")
+        .replace("/", "_")
+        .replace(" ", "_")
+        .replace(":", "")
+    )
+    return f"{source_type.value.lower()}:{slug}"
+
+
+def _feed(
+    label: str,
+    feed_url: str,
+    source_type: SourceType = SourceType.RSS,
+    *,
+    vendor: str | None = None,
+    cadence_minutes: int = 1440,
+    priority: int = 1,
+    query_terms: list[str] | None = None,
+) -> dict[str, Any]:
+    config: dict[str, Any] = {
+        "feed_url": feed_url,
+        "vendor": vendor,
+        "query_terms": query_terms or DEFAULT_QUERY_TERMS,
+        "poll_interval_minutes": cadence_minutes,
+    }
+    return {
+        "name": _source_name(source_type, label),
+        "type": source_type,
+        "base_url": feed_url,
+        "priority": priority,
+        "config": config,
+    }
+
+
+def _page(
+    label: str,
+    url: str,
+    source_type: SourceType,
+    *,
+    vendor: str | None = None,
+    article_selector: str = "article, main li, .card, .event-card",
+    title_selector: str = "h1, h2, h3, a",
+    link_selector: str = "a",
+    cadence_minutes: int = 10080,
+    priority: int = 1,
+    query_terms: list[str] | None = None,
+) -> dict[str, Any]:
+    config: dict[str, Any] = {
+        "url": url,
+        "vendor": vendor,
+        "article_selector": article_selector,
+        "title_selector": title_selector,
+        "link_selector": link_selector,
+        "query_terms": query_terms or DEFAULT_QUERY_TERMS,
+        "poll_interval_minutes": cadence_minutes,
+    }
+    return {
+        "name": _source_name(source_type, label),
+        "type": source_type,
+        "base_url": url,
+        "priority": priority,
+        "config": config,
+    }
+
+
+SOURCE_DEFINITIONS: list[dict[str, Any]] = [
+    # Official vendor RSS/blog feeds.
+    _feed(
+        "AWS Training and Certification Blog",
+        "https://aws.amazon.com/blogs/training-and-certification/feed/",
+        SourceType.BLOG,
+        vendor="AWS",
+        cadence_minutes=1440,
+    ),
+    _feed(
+        "AWS Training Announcements",
+        "https://aws.amazon.com/blogs/training-and-certification/category/post-types/announcements/feed/",
+        SourceType.BLOG,
+        vendor="AWS",
+        cadence_minutes=1440,
+        priority=2,
+    ),
+    _feed(
+        "AWS Builder",
+        "https://builder.aws.com/rss.xml",
+        SourceType.RSS,
+        vendor="AWS",
+        cadence_minutes=1440,
+        priority=2,
+    ),
+    _feed(
+        "Microsoft Learn Blog",
+        "https://techcommunity.microsoft.com/t5/microsoft-learn-blog/bg-p/MicrosoftLearnBlog/rss",
+        SourceType.BLOG,
+        vendor="Microsoft",
+        cadence_minutes=1440,
+    ),
+    _feed(
+        "Google Cloud Blog",
+        "https://cloud.google.com/blog/rss",
+        SourceType.BLOG,
+        vendor="Google Cloud",
+        cadence_minutes=1440,
+    ),
+    _feed(
+        "Cisco Newsroom",
+        "https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json",
+        SourceType.BLOG,
+        vendor="Cisco",
+        cadence_minutes=1440,
+    ),
+    _feed(
+        "Red Hat Blog",
+        "https://www.redhat.com/en/rss/blog",
+        SourceType.BLOG,
+        vendor="Red Hat",
+        cadence_minutes=1440,
+    ),
+    _feed(
+        "Linux Foundation Blog",
+        "https://www.linuxfoundation.org/blog/rss.xml",
+        SourceType.BLOG,
+        vendor="Linux Foundation",
+        cadence_minutes=1440,
+    ),
+
+    # Community/forum RSS feeds.
+    _feed(
+        "Microsoft Learn Q&A Voucher Search",
+        "https://learn.microsoft.com/api/search/rss?search=voucher%20certification%20exam",
+        SourceType.FORUM,
+        vendor="Microsoft",
+        cadence_minutes=10080,
+        priority=2,
+    ),
+    _feed(
+        "Google Cloud Training Group",
+        "https://groups.google.com/g/google-cloud-training/feed/atom_v1_0_msgs.xml",
+        SourceType.FORUM,
+        vendor="Google Cloud",
+        cadence_minutes=10080,
+    ),
+
+    # Aggregator blogs called out in the report.
+    _feed("Tutorials Dojo", "https://tutorialsdojo.com/feed/", SourceType.RSS, vendor="Tutorials Dojo"),
+    _feed("CertMag", "https://certmag.com/feed/", SourceType.RSS, vendor="CertMag"),
+    _feed("Packet Pilot", "https://packetpilot.com/feed/", SourceType.RSS, vendor="Packet Pilot"),
+    _feed("Cloud Academy Blog", "https://cloudacademy.com/blog/feed/", SourceType.RSS, vendor="Cloud Academy"),
+    _feed("HackerDNA", "https://hackerdna.com/feed", SourceType.RSS, vendor="HackerDNA"),
+
+    # Official vendor/event pages.
+    _page(
+        "Microsoft Build",
+        "https://build.microsoft.com/",
+        SourceType.EVENT,
+        vendor="Microsoft",
+        article_selector="article, .card, .event-card, main section",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "Microsoft Ignite",
+        "https://ignite.microsoft.com/",
+        SourceType.EVENT,
+        vendor="Microsoft",
+        article_selector="article, .card, .event-card, main section",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "Microsoft Cloud Skills Challenge",
+        "https://learn.microsoft.com/training/challenges",
+        SourceType.EVENT,
+        vendor="Microsoft",
+        article_selector="article, .card, li, main section",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "AWS Events",
+        "https://aws.amazon.com/events/",
+        SourceType.EVENT,
+        vendor="AWS",
+        article_selector=".lb-content-item, article, .card",
+        title_selector="h2, h3, a",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "AWS reInvent",
+        "https://reinvent.awsevents.com/",
+        SourceType.EVENT,
+        vendor="AWS",
+        article_selector="article, .card, main section",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "Google Cloud Events",
+        "https://cloud.google.com/events",
+        SourceType.EVENT,
+        vendor="Google Cloud",
+        article_selector="article, .event-item, .card",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "Google Cloud Next",
+        "https://cloud.withgoogle.com/next",
+        SourceType.EVENT,
+        vendor="Google Cloud",
+        article_selector="article, .card, main section",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "Cisco Live",
+        "https://www.ciscolive.com/global.html",
+        SourceType.EVENT,
+        vendor="Cisco",
+        article_selector=".cmp-teaser, article, .card",
+        title_selector="h2, h3, a",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "Cisco Training Offers",
+        "https://learningnetwork.cisco.com/s/certification-offers",
+        SourceType.WEBSITE,
+        vendor="Cisco",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "CompTIA Offers",
+        "https://www.comptia.org/testing/testing-options/vouchers",
+        SourceType.WEBSITE,
+        vendor="CompTIA",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "ISC2 Blog",
+        "https://www.isc2.org/Insights",
+        SourceType.WEBSITE,
+        vendor="ISC2",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "Oracle University Events",
+        "https://education.oracle.com/events",
+        SourceType.EVENT,
+        vendor="Oracle",
+        article_selector=".event-listing, article, .card, li",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "Oracle University Offers",
+        "https://education.oracle.com/oracle-certification-exam-voucher",
+        SourceType.WEBSITE,
+        vendor="Oracle",
+        cadence_minutes=10080,
+    ),
+    _page(
+        "Red Hat Training Specials",
+        "https://www.redhat.com/en/services/training-and-certification/offers",
+        SourceType.WEBSITE,
+        vendor="Red Hat",
+        cadence_minutes=10080,
+    ),
+
+    # Aggregators without reliable known feeds.
+    _page(
+        "MSFTHub Vouchers",
+        "https://msfthub.com/vouchers/",
+        SourceType.WEBSITE,
+        vendor="MSFTHub",
+        article_selector="li",
+        title_selector="span",
+        link_selector="a",
+        cadence_minutes=1440,
+        priority=2,
+    ),
+    _page("VladTalksTech", "https://vladtalkstech.com/", SourceType.WEBSITE, vendor="VladTalksTech"),
 ]
 
 
 async def bootstrap_data() -> None:
-    """Populates sources and keywords tables on startup. Safe to re-run (idempotent)."""
-    logger.info("Running database bootstrap...")
+    """Populate sources and keywords. Safe to re-run."""
+    logger.info("Running database bootstrap")
     async with AsyncSessionLocal() as session:
-
-        # Keywords
         for kw in KEYWORDS:
             await session.execute(
                 insert(Keyword)
@@ -186,8 +379,7 @@ async def bootstrap_data() -> None:
                 .on_conflict_do_nothing(index_elements=["keyword"])
             )
 
-        # Reddit sources
-        for sub in REDDIT_SUBREDDITS:
+        for sub in HIGH_SIGNAL_REDDIT_SUBREDDITS:
             await session.execute(
                 insert(Source)
                 .values(
@@ -195,42 +387,31 @@ async def bootstrap_data() -> None:
                     type=SourceType.REDDIT,
                     base_url=f"https://www.reddit.com/r/{sub}",
                     enabled=True,
-                    priority=1,
-                    config={"subreddit": sub},
+                    priority=2,
+                    config={
+                        "subreddit": sub,
+                        "query_terms": DEFAULT_QUERY_TERMS,
+                        "poll_interval_minutes": 1440,
+                        "auth_mode": "praw_or_rss",
+                    },
                 )
                 .on_conflict_do_nothing(index_elements=["name"])
             )
 
-        # RSS feeds (includes BLOG and FORUM types via RSS)
-        for feed in RSS_FEEDS:
+        for source in SOURCE_DEFINITIONS:
             await session.execute(
                 insert(Source)
                 .values(
-                    name=f"{feed['type'].value.lower()}:{feed['name'].lower().replace(' ', '_')}",
-                    type=feed["type"],
-                    base_url=feed["feed_url"],
+                    name=source["name"],
+                    type=source["type"],
+                    base_url=source["base_url"],
                     enabled=True,
-                    priority=1,
-                    config={"feed_url": feed["feed_url"]},
-                )
-                .on_conflict_do_nothing(index_elements=["name"])
-            )
-
-        # Websites (includes EVENT and FORUM types)
-        for site in WEBSITES:
-            await session.execute(
-                insert(Source)
-                .values(
-                    name=f"{site['type'].value.lower()}:{site['name'].lower().replace(' ', '_')}",
-                    type=site["type"],
-                    base_url=site["base_url"],
-                    enabled=True,
-                    priority=1,
-                    config=site["config"],
+                    priority=source.get("priority", 1),
+                    config=source["config"],
                 )
                 .on_conflict_do_nothing(index_elements=["name"])
             )
 
         await session.commit()
 
-    logger.info("Database bootstrap complete.")
+    logger.info("Database bootstrap complete")

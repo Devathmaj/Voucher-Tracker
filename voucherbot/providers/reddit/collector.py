@@ -1,5 +1,10 @@
 from datetime import datetime, timezone
 from typing import Any
+import hashlib
+from urllib.parse import quote_plus
+
+import feedparser
+import httpx
 import structlog
 
 from voucherbot.providers.base import BaseCollector, NormalizedPost
@@ -20,7 +25,23 @@ class RedditCollector(BaseCollector):
             logger.warning("RedditCollector: no subreddit in config", config=source_config)
             return []
 
-        raw_posts = await self.client.fetch_new_posts(subreddit_name, limit=limit)
+        if not self.client.is_configured:
+            return await self._collect_via_rss(source_config, limit)
+
+        query_terms = source_config.get("query_terms") or []
+        if query_terms:
+            query = " OR ".join(f'"{term}"' if " " in term else term for term in query_terms)
+            raw_posts = await self.client.search_posts(
+                query=query,
+                subreddit_name=subreddit_name,
+                limit=limit,
+            )
+        else:
+            raw_posts = await self.client.fetch_new_posts(subreddit_name, limit=limit)
+
+        return self._normalize_praw_posts(subreddit_name, raw_posts)
+
+    def _normalize_praw_posts(self, subreddit_name: str, raw_posts) -> list[NormalizedPost]:
         results: list[NormalizedPost] = []
 
         for post in raw_posts:
@@ -47,5 +68,60 @@ class RedditCollector(BaseCollector):
                     "flair": post.link_flair_text,
                 }
             ))
+
+        return results
+
+    async def _collect_via_rss(
+        self,
+        source_config: dict[str, Any],
+        limit: int,
+    ) -> list[NormalizedPost]:
+        subreddit_name = source_config["subreddit"]
+        query_terms = source_config.get("query_terms") or []
+        if query_terms:
+            query = quote_plus(" OR ".join(query_terms))
+            url = f"https://www.reddit.com/r/{subreddit_name}/search.rss?q={query}&restrict_sr=on&sort=new"
+        else:
+            url = f"https://www.reddit.com/r/{subreddit_name}/new.rss"
+
+        headers = {
+            "User-Agent": "VoucherBot/0.1 source-ingestion",
+        }
+        logger.info("RedditCollector: fetching RSS fallback", subreddit=subreddit_name)
+
+        try:
+            async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+        except Exception as exc:
+            logger.error(
+                "RedditCollector: RSS fallback failed",
+                subreddit=subreddit_name,
+                error=str(exc),
+            )
+            return []
+
+        feed = feedparser.parse(response.content)
+        results: list[NormalizedPost] = []
+        for entry in feed.entries[:limit]:
+            link = entry.get("link", "")
+            external_id = entry.get("id") or hashlib.sha1(link.encode()).hexdigest()
+            title = entry.get("title", "(no title)")
+            results.append(
+                NormalizedPost(
+                    external_id=external_id,
+                    url=link,
+                    title=title,
+                    content=entry.get("summary") or None,
+                    summary=None,
+                    author=entry.get("author"),
+                    published_at=None,
+                    raw_data={
+                        "subreddit": subreddit_name,
+                        "feed_url": url,
+                        "auth_mode": "rss",
+                    },
+                )
+            )
 
         return results

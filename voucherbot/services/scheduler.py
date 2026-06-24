@@ -51,6 +51,9 @@ async def sync_forums():
 async def sync_events():
     await _run(SourceType.EVENT)
 
+async def sync_websites():
+    await _run(SourceType.WEBSITE)
+
 
 def start_scheduler():
     logger.info("Starting scheduler")
@@ -69,6 +72,9 @@ def start_scheduler():
     
     # Vendor event pages: 6 hours
     scheduler.add_job(sync_events, IntervalTrigger(hours=6), id="sync_events", replace_existing=True)
+
+    # Static vendor and aggregator pages: 6 hours, source configs decide actual cadence
+    scheduler.add_job(sync_websites, IntervalTrigger(hours=6), id="sync_websites", replace_existing=True)
     
     scheduler.start()
 

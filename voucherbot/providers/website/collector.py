@@ -46,6 +46,8 @@ class WebsiteCollector(BaseCollector):
 
         soup = BeautifulSoup(response.text, "lxml")
         articles = soup.select(article_selector)[:limit]
+        if not articles:
+            articles = [soup]
 
         results: list[NormalizedPost] = []
         for article in articles:
@@ -73,7 +75,11 @@ class WebsiteCollector(BaseCollector):
                 summary=None,
                 author=None,
                 published_at=None,
-                raw_data={"scraped_from": url, "article_selector": article_selector},
+                raw_data={
+                    "scraped_from": url,
+                    "article_selector": article_selector,
+                    "vendor": source_config.get("vendor"),
+                },
             ))
 
         logger.info("WebsiteCollector: collected", url=url, count=len(results))
