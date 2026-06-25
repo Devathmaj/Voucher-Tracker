@@ -1,29 +1,51 @@
 """
-Shared processing pipeline: Collect → Normalize → Deduplicate → Keyword Score → Status
+Shared processing pipeline: Collect → Keyword Filter → Doc Dedup → AI Extraction → Event Matching
+
+Stage 1 — Document Deduplication (deterministic)
+    Intra-batch duplicates removed in-memory (deduplicate_batch).
+    Cross-source duplicates caught by the partial UNIQUE index on posts.content_hash.
+    Exact duplicates are dropped before AI inference runs.
+
+Stage 2 — AI Extraction
+    Only posts that survived Stage 1 are sent to the AI analyzer.
+    Returns a canonical ExtractedEvent (provider-agnostic).
+
+Stage 3 — Canonical Event Matching
+    AI-extracted data is scored against existing Events using configured weights.
+    Score >= auto_merge_threshold  → attach to existing Event (AUTO_MERGED).
+    Score in [possible_match, auto_merge) → POSSIBLE_MATCH (for future review).
+    Score < possible_match_threshold → create new canonical Event.
 
 All providers produce NormalizedPost objects. Everything after collection
 is provider-agnostic and reused across Reddit, RSS, and Website sources.
 """
+from __future__ import annotations
+
 import asyncio
 import uuid
 from datetime import datetime, timezone
 
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from voucherbot.models.source import Source, SourceType
-from voucherbot.models.post import Post, PostStatus
-from voucherbot.models.keyword import Keyword
-from voucherbot.providers.base import BaseCollector, NormalizedPost
 from voucherbot.config.settings import settings
+from voucherbot.models.keyword import Keyword
+from voucherbot.models.post import Post, PostStatus
+from voucherbot.models.source import Source, SourceType
+from voucherbot.providers.base import BaseCollector, NormalizedPost
 from voucherbot.services.ai.analyzer import analyze_post
+from voucherbot.services.ingestion.dedup import content_hash, deduplicate_batch
+from voucherbot.services.ingestion.event_matcher import EventMatcher
 
 logger = structlog.get_logger(__name__)
 
-# Minimum cumulative keyword score to be queued for AI analysis
+# Minimum cumulative keyword score to be queued for AI analysis.
 SCORE_THRESHOLD = 1
+
+# Module-level EventMatcher instance (stateless, safe to share).
+_event_matcher = EventMatcher()
 
 
 async def run_pipeline(
@@ -34,54 +56,57 @@ async def run_pipeline(
 ) -> dict:
     """
     Run the full ingestion pipeline for all enabled sources of a given type.
-    `collectors` is a dict mapping a string key (e.g., 'rss', 'web', 'reddit') to a BaseCollector.
+    ``collectors`` maps a string key (e.g., 'rss', 'web', 'reddit') to a BaseCollector.
     """
     sync_id = f"Sync-{str(uuid.uuid4())[:8]}"
     start_time = datetime.now(timezone.utc)
 
-    # Load enabled sources of this type
+    # Load enabled sources of this type.
     result = await db.execute(
-        select(Source).where(Source.enabled == True, Source.type == source_type)
+        select(Source).where(Source.enabled == True, Source.type == source_type)  # noqa: E712
     )
     all_sources = result.scalars().all()
     sources = [source for source in all_sources if _source_due(source)]
 
-    # Load enabled keywords with scores
-    kw_result = await db.execute(select(Keyword).where(Keyword.enabled == True))
+    # Load enabled keywords with scores.
+    kw_result = await db.execute(select(Keyword).where(Keyword.enabled == True))  # noqa: E712
     keywords: list[Keyword] = kw_result.scalars().all()
 
     stats = {
         "sources": len(sources),
         "skipped": len(all_sources) - len(sources),
         "fetched": 0,
-        "new": 0,
-        "duplicates": 0,
-        "queued": 0,
-        "filtered": 0,
+        "keyword_filtered": 0,
+        "doc_duplicates": 0,      # Stage 1: exact doc duplicates (same content_hash)
+        "new_posts": 0,
         "ai_analyzed": 0,
+        "events_created": 0,      # Stage 3: new Events created
+        "events_attached": 0,     # Stage 3: Posts attached to existing Events
+        "possible_matches": 0,    # Stage 3: flagged for future review
         "errors": 0,
     }
     semaphore = asyncio.Semaphore(settings.reddit_concurrency_limit)
 
-    async def process_source(source: Source):
+    async def process_source(source: Source) -> None:
         async with semaphore:
             try:
-                # Determine the correct collector based on config structure
                 config = source.config or {}
-                collector = None
+                collector: BaseCollector | None = None
                 if source.type == SourceType.REDDIT:
                     collector = collectors.get("reddit")
                 elif "feed_url" in config:
                     collector = collectors.get("rss")
                 elif "article_selector" in config:
                     collector = collectors.get("web")
-                
+
                 if not collector:
                     logger.error(f"{sync_id} No suitable collector found for {source.name}")
                     stats["errors"] += 1
                     return
 
-                s_stats = await _process_one_source(db, source, collector, keywords, fetch_limit)
+                s_stats = await _process_one_source(
+                    db, source, collector, keywords, fetch_limit
+                )
                 for k, v in s_stats.items():
                     stats[k] += v
             except Exception as e:
@@ -91,13 +116,14 @@ async def run_pipeline(
                 await db.commit()
 
     if sources:
-        await asyncio.gather(*[process_source(s) for s in sources])
+        for s in sources:
+            await process_source(s)
 
     duration = (datetime.now(timezone.utc) - start_time).total_seconds()
     logger.info(
         f"{sync_id} [{source_type.value}] complete",
         duration=f"{duration:.1f}s",
-        **stats
+        **stats,
     )
     return stats
 
@@ -111,7 +137,11 @@ def _source_due(source: Source) -> bool:
     try:
         interval_minutes = int(interval)
     except (TypeError, ValueError):
-        logger.warning("pipeline: invalid source poll interval", source=source.name, interval=interval)
+        logger.warning(
+            "pipeline: invalid source poll interval",
+            source=source.name,
+            interval=interval,
+        )
         return True
 
     now = datetime.now(timezone.utc)
@@ -130,27 +160,67 @@ async def _process_one_source(
     keywords: list[Keyword],
     fetch_limit: int,
 ) -> dict:
-    stats = {"fetched": 0, "new": 0, "duplicates": 0, "queued": 0, "filtered": 0, "ai_analyzed": 0}
+    stats = {
+        "fetched": 0,
+        "keyword_filtered": 0,
+        "doc_duplicates": 0,
+        "new_posts": 0,
+        "ai_analyzed": 0,
+        "events_created": 0,
+        "events_attached": 0,
+        "possible_matches": 0,
+    }
 
-    # 1. Collect
+    # ── Stage 0: Collect ──────────────────────────────────────────────────────
     posts: list[NormalizedPost] = await collector.collect(
         source_config=source.config or {},
         limit=fetch_limit,
     )
     stats["fetched"] = len(posts)
 
-    # 2. Deduplicate + Keyword Score + Upsert
+    # ── Keyword Filtering ─────────────────────────────────────────────────────
+    scored: list[tuple[NormalizedPost, int]] = []
     for post in posts:
-        # 2a. Keyword scoring
         text = f"{post.title} {post.content or ''}".lower()
         score = sum(kw.score for kw in keywords if kw.keyword.lower() in text)
-        status = PostStatus.QUEUED if score >= SCORE_THRESHOLD else PostStatus.FILTERED
+        if score < SCORE_THRESHOLD:
+            stats["keyword_filtered"] += 1
+        else:
+            scored.append((post, score))
 
-        if status == PostStatus.FILTERED:
-            stats["filtered"] += 1
-            continue
+    if not scored:
+        source.last_checked_utc = datetime.now(timezone.utc)
+        source.error_count = 0
+        await db.commit()
+        return stats
 
-        # 2b. Insert with ON CONFLICT DO NOTHING
+    # ── Stage 1: Document Deduplication (in-memory batch) ────────────────────
+    # Compute content_hash for every surviving post.
+    hashed: list[tuple[NormalizedPost, int, str]] = [
+        (post, score, content_hash(post.title, post.url))
+        for post, score in scored
+    ]
+
+    # Remove intra-batch duplicates (same content_hash within this pipeline run).
+    seen_hashes: set[str] = set()
+    deduped: list[tuple[NormalizedPost, int, str]] = []
+    for post, score, ch in hashed:
+        if ch in seen_hashes:
+            stats["doc_duplicates"] += 1
+        else:
+            seen_hashes.add(ch)
+            deduped.append((post, score, ch))
+
+    # ── Stage 1 cont.: DB upsert with content_hash ───────────────────────────
+    # We use ON CONFLICT DO NOTHING for uq_posts_source_external.
+    # If the partial unique index on content_hash triggers a violation (because
+    # another source already fetched the exact same document), it will raise an
+    # IntegrityError which we catch and ignore.
+    inserted_posts: list[tuple[NormalizedPost, Post]] = []
+    
+    from sqlalchemy.exc import IntegrityError
+
+    for post, score, ch in deduped:
         stmt = (
             insert(Post)
             .values(
@@ -162,42 +232,78 @@ async def _process_one_source(
                 summary=post.summary,
                 author=post.author,
                 published_at=post.published_at,
-                status=status,
+                status=PostStatus.QUEUED,
                 score=score,
                 raw_data=post.raw_data,
+                content_hash=ch,
             )
             .on_conflict_do_nothing(constraint="uq_posts_source_external")
         )
-        result = await db.execute(stmt)
+        
+        # In SQLAlchemy async, we must manage the savepoint ourselves if we
+        # expect to catch and survive IntegrityErrors inside a transaction.
+        async with db.begin_nested():
+            try:
+                result = await db.execute(stmt)
+            except IntegrityError:
+                # Caught uq_posts_content_hash violation
+                stats["doc_duplicates"] += 1
+                continue
 
         if result.rowcount == 0:
-            stats["duplicates"] += 1
+            # Caught uq_posts_source_external via ON CONFLICT DO NOTHING
+            stats["doc_duplicates"] += 1
+            continue
+
+        # Fetch the newly inserted row (needed for event_id assignment later).
+        inserted_row = await db.execute(
+            select(Post).where(
+                Post.source_id == source.id,
+                Post.external_id == post.external_id,
+            )
+        )
+        db_post = inserted_row.scalars().first()
+        if db_post:
+            stats["new_posts"] += 1
+            inserted_posts.append((post, db_post))
+
+    # ── Stage 2: AI Extraction ────────────────────────────────────────────────
+    # Only runs on posts that survived Stage 1.
+    for post, db_post in inserted_posts:
+        extracted = await analyze_post(title=post.title, content=post.content)
+        if extracted is None:
+            # Provider unavailable; leave post status as QUEUED for retry.
+            continue
+
+        # Persist the raw AI result for debugging / audit.
+        db_post.ai_result = extracted.model_dump()
+        stats["ai_analyzed"] += 1
+
+        if not extracted.is_voucher:
+            db_post.status = PostStatus.FILTERED
+            logger.debug(
+                "pipeline: AI classified as non-voucher",
+                post_id=db_post.id,
+                confidence=extracted.confidence,
+            )
+            continue
+
+        # ── Stage 3: Canonical Event Matching ─────────────────────────────────
+        from voucherbot.models.event import MatchConfidence  # avoid circular at module top
+
+        event, confidence = await _event_matcher.match_or_create(
+            db, extracted, db_post, source.type
+        )
+        db_post.status = PostStatus.PROCESSED
+
+        if confidence == MatchConfidence.NEW:
+            stats["events_created"] += 1
+        elif confidence == MatchConfidence.POSSIBLE_MATCH:
+            stats["possible_matches"] += 1
         else:
-            stats["new"] += 1
-            stats["queued"] += 1
+            stats["events_attached"] += 1
 
-            # --- AI Analysis ---
-            # Only run for freshly inserted posts to avoid re-analyzing duplicates.
-            ai_result = await analyze_post(title=post.title, content=post.content)
-            if ai_result is not None:
-                # Fetch the newly inserted row so we can update it
-                inserted = await db.execute(
-                    select(Post)
-                    .where(Post.source_id == source.id, Post.external_id == post.external_id)
-                )
-                db_post = inserted.scalars().first()
-                if db_post:
-                    db_post.ai_result = ai_result
-                    db_post.status = PostStatus.PROCESSED
-                    stats["ai_analyzed"] += 1
-                    logger.debug(
-                        "pipeline: ai analysis saved",
-                        post_external_id=post.external_id,
-                        is_voucher=ai_result.get("is_voucher"),
-                        confidence=ai_result.get("confidence"),
-                    )
-
-    # 3. Update source last_checked_utc
+    # ── Finalise ──────────────────────────────────────────────────────────────
     source.last_checked_utc = datetime.now(timezone.utc)
     source.error_count = 0
     await db.commit()

@@ -57,14 +57,6 @@ KEYWORDS = [
     {"keyword": "certification", "score": 1},
     {"keyword": "exam", "score": 1},
     {"keyword": "pearsonvue", "score": 2},
-    {"keyword": "aws", "score": 1},
-    {"keyword": "azure", "score": 1},
-    {"keyword": "google cloud", "score": 1},
-    {"keyword": "cisco", "score": 1},
-    {"keyword": "comptia", "score": 1},
-    {"keyword": "isc2", "score": 1},
-    {"keyword": "oracle", "score": 1},
-    {"keyword": "red hat", "score": 1},
 ]
 
 HIGH_SIGNAL_REDDIT_SUBREDDITS = [

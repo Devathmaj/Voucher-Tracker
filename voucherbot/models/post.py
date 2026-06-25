@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
 from voucherbot.models.base import Base
+from voucherbot.models.event import EventStatus  # noqa: F401 – re-exported for convenience
 
 
 class PostStatus(enum.Enum):
@@ -37,7 +38,20 @@ class Post(Base):
     score: Mapped[int] = mapped_column(Integer, default=0)
     raw_data: Mapped[Optional[Any]] = mapped_column(JSONB)
     ai_result: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
+    # --- Deduplication ---
+    # SHA-1 of normalised(title) + normalised(url).  Nullable so existing rows
+    # remain valid; the unique partial index (WHERE content_hash IS NOT NULL)
+    # enforces cross-source dedup without touching historical data.
+    content_hash: Mapped[Optional[str]] = mapped_column(String(40), nullable=True, index=True)
+    # --- Event linkage ---
+    # Nullable FK to the canonical Event this post was matched to.  NULL means
+    # the post has not yet been processed by the EventMatcher (or the AI
+    # classified it as non-voucher content).
+    event_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("events.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     source = relationship("Source", back_populates="posts")
+    event = relationship("Event", back_populates="posts")
