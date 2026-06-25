@@ -125,6 +125,9 @@ def _feed(
     priority: int = 1,
     query_terms: list[str] | None = None,
     note: str | None = None,
+    unsupported: bool = False,
+    unsupported_reason: str | None = None,
+    enabled: bool | None = None,
 ) -> dict[str, Any]:
     interval = cadence_minutes if cadence_minutes is not None else _TIER_CADENCE_MINUTES[priority_tier]
     config: dict[str, Any] = {
@@ -135,12 +138,16 @@ def _feed(
     }
     if note:
         config["note"] = note
+    if unsupported:
+        config["unsupported"] = True
+        config["unsupported_reason"] = unsupported_reason or "Blocked by site policy"
     return {
         "name": _source_name(source_type, label),
         "type": source_type,
         "base_url": feed_url,
         "priority": priority,
         "priority_tier": priority_tier,
+        "enabled": False if unsupported else (True if enabled is None else enabled),
         "config": config,
     }
 
@@ -159,6 +166,9 @@ def _page(
     priority: int = 1,
     query_terms: list[str] | None = None,
     note: str | None = None,
+    unsupported: bool = False,
+    unsupported_reason: str | None = None,
+    enabled: bool | None = None,
 ) -> dict[str, Any]:
     interval = cadence_minutes if cadence_minutes is not None else _TIER_CADENCE_MINUTES[priority_tier]
     config: dict[str, Any] = {
@@ -172,12 +182,16 @@ def _page(
     }
     if note:
         config["note"] = note
+    if unsupported:
+        config["unsupported"] = True
+        config["unsupported_reason"] = unsupported_reason or "Blocked by site policy"
     return {
         "name": _source_name(source_type, label),
         "type": source_type,
         "base_url": url,
         "priority": priority,
         "priority_tier": priority_tier,
+        "enabled": False if unsupported else (True if enabled is None else enabled),
         "config": config,
     }
 
@@ -293,6 +307,7 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         "base_url": "https://www.pluralsight.com/resources/blog",
         "priority": 1,
         "priority_tier": "C",
+        "enabled": False,
         "config": {
             "collector": "website",
             "url": "https://www.pluralsight.com/resources/blog",
@@ -300,9 +315,10 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
             "title_selector": "p",
             "link_selector": "self",
             "vendor": "Pluralsight",
-            "note": (
-                "No RSS exists. Scrapes blog listing page. Selector may need tuning "
-                "- inspect live page if 0 items returned."
+            "unsupported": True,
+            "unsupported_reason": (
+                "Pluralsight Enterprise ToS forbid robots/crawlers/data-mining tools "
+                "not provided by Pluralsight. Prefer official feeds/APIs only."
             ),
             "query_terms": DEFAULT_QUERY_TERMS,
             "poll_interval_minutes": 240,
@@ -348,6 +364,11 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         vendor="AWS",
         article_selector=".lb-content-item, article, .card",
         title_selector="h2, h3, a",
+        unsupported=True,
+        unsupported_reason=(
+            "AWS robots.txt / Customer Agreement discourage automated access to "
+            "event pages. Use AWS Training & Certification RSS feeds instead."
+        ),
     ),
     _page(
         "AWS reInvent",
@@ -356,6 +377,11 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         vendor="AWS",
         article_selector="main section, main",
         title_selector="h2, h3",
+        unsupported=True,
+        unsupported_reason=(
+            "AWS event HTML scraping is high-risk per site policy. Prefer official "
+            "AWS blog/announcement RSS."
+        ),
     ),
     _page(
         "Google Cloud Events",
@@ -363,6 +389,7 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         SourceType.EVENT,
         vendor="Google Cloud",
         article_selector="article, .event-item, .card",
+        note="Conditional HTML — robots-aware, slow poll. Prefer Google Cloud blog RSS.",
     ),
     _page(
         "Google Cloud Next",
@@ -370,6 +397,7 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         SourceType.EVENT,
         vendor="Google Cloud",
         article_selector="article, .card, main section",
+        note="Conditional HTML — robots-aware, slow poll.",
     ),
     _page(
         "Cisco Live",
@@ -378,6 +406,10 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         vendor="Cisco",
         article_selector=".cmp-teaser, article, .card",
         title_selector="h2, h3, a",
+        unsupported=True,
+        unsupported_reason=(
+            "Cisco Terms forbid crawling/bots/scripts. Use Cisco Newsroom RSS only."
+        ),
     ),
     _page(
         "CompTIA Offers",
@@ -387,12 +419,18 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         article_selector="main li",
         title_selector="a",
         link_selector="a",
+        note="Conditional HTML — robots-aware, ≤0.5 req/s via global scrape policy.",
     ),
     _page(
         "ISC2 Blog",
         "https://www.isc2.org/Insights",
         SourceType.WEBSITE,
         vendor="ISC2",
+        unsupported=True,
+        unsupported_reason=(
+            "ISC2 Site Use Policy forbids bots/scrapers without permission. "
+            "Use official APIs/feeds only."
+        ),
     ),
     _feed(
         "Oracle University Blog",
@@ -413,6 +451,11 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         article_selector="article, .card, main section, main li",
         title_selector="h2, h3, a",
         link_selector="a",
+        unsupported=True,
+        unsupported_reason=(
+            "Red Hat site TOS forbid robot/spider retrieval apps; robots.txt "
+            "sets Crawl-delay 10. Use Red Hat Blog RSS only."
+        ),
     ),
 
     # Aggregators without reliable known feeds (Tier C).
@@ -471,18 +514,29 @@ async def bootstrap_data() -> None:
             )
 
         for source in SOURCE_DEFINITIONS:
+            enabled = source.get("enabled", True)
             await session.execute(
                 insert(Source)
                 .values(
                     name=source["name"],
                     type=source["type"],
                     base_url=source["base_url"],
-                    enabled=True,
+                    enabled=enabled,
                     priority=source.get("priority", 1),
                     priority_tier=source.get("priority_tier", "C"),
                     config=source["config"],
                 )
-                .on_conflict_do_nothing(index_elements=["name"])
+                .on_conflict_do_update(
+                    index_elements=["name"],
+                    set_={
+                        "type": source["type"],
+                        "base_url": source["base_url"],
+                        "enabled": enabled,
+                        "priority": source.get("priority", 1),
+                        "priority_tier": source.get("priority_tier", "C"),
+                        "config": source["config"],
+                    },
+                )
             )
 
         for sub in DISABLED_REDDIT_SUBREDDITS:

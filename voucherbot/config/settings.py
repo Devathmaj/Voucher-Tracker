@@ -67,6 +67,14 @@ class Settings(BaseSettings):
     reddit_fetch_limit: int = 25
     reddit_ingestion_enabled: bool = False
 
+    # Scraping policy (see deep-research-report)
+    # Identifying UA; empty → built from email contact. Do not spoof browsers.
+    scraper_user_agent: Optional[str] = None
+    scraper_contact_email: Optional[str] = None
+    scraper_respect_robots: bool = True
+    # Default politeness when robots.txt has no Crawl-delay (~0.5 req/s).
+    scraper_min_delay_seconds: float = 2.0
+
     # DB-driven scheduler
     tick_lease_ttl_seconds: int = 90
     tick_job_timeout_seconds: int = 45

@@ -4,11 +4,15 @@ import hashlib
 from urllib.parse import quote_plus
 
 import feedparser
-import httpx
 import structlog
 
 from voucherbot.providers.base import BaseCollector, NormalizedPost
 from voucherbot.providers.reddit.client import RedditClient
+from voucherbot.providers.http_policy import (
+    RobotsDisallowedError,
+    polite_get,
+    scraper_user_agent,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -85,14 +89,23 @@ class RedditCollector(BaseCollector):
             url = f"https://www.reddit.com/r/{subreddit_name}/new.rss"
 
         headers = {
-            "User-Agent": "VoucherBot/0.1 source-ingestion",
+            "User-Agent": scraper_user_agent(),
         }
         logger.info("RedditCollector: fetching RSS fallback", subreddit=subreddit_name)
 
         try:
-            async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15) as client:
-                response = await client.get(url)
-                response.raise_for_status()
+            response = await polite_get(
+                url,
+                accept="application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+                timeout=15,
+                extra_headers=headers,
+            )
+        except RobotsDisallowedError:
+            logger.info(
+                "RedditCollector: RSS fallback blocked by robots.txt",
+                subreddit=subreddit_name,
+            )
+            return []
         except Exception as exc:
             logger.error(
                 "RedditCollector: RSS fallback failed",

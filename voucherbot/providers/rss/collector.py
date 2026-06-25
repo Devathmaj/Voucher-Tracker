@@ -4,25 +4,24 @@ from typing import Any
 import json
 import re
 import structlog
-import httpx
 from lxml import etree
 import feedparser
 import hashlib
 from bs4 import BeautifulSoup
 
 from voucherbot.providers.base import BaseCollector, NormalizedPost
+from voucherbot.providers.http_policy import (
+    default_headers,
+    polite_get,
+    RobotsDisallowedError,
+)
 
 logger = structlog.get_logger(__name__)
 
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+_FEED_ACCEPT = (
+    "application/rss+xml, application/atom+xml, application/xml, "
+    "application/json, text/xml, */*"
 )
-
-HEADERS = {
-    "User-Agent": USER_AGENT,
-    "Accept": "application/rss+xml, application/atom+xml, application/xml, application/json, text/xml, */*",
-}
 
 # Legacy Tech Community blog URLs redirect to login; map them to working syndication endpoints.
 _TECHCOMMUNITY_FEED_REWRITES: dict[str, str] = {
@@ -98,7 +97,7 @@ def _parse_json_date(value: Any) -> datetime | None:
 
 
 class RssCollector(BaseCollector):
-    """Collects items from an RSS/Atom feed."""
+    """Collects items from an RSS/Atom feed (preferred over HTML scraping)."""
 
     async def collect(self, source_config: dict[str, Any], limit: int = 50) -> list[NormalizedPost]:
         if source_config.get("unsupported"):
@@ -117,33 +116,37 @@ class RssCollector(BaseCollector):
         logger.info("RssCollector: fetching", feed_url=feed_url)
 
         try:
-            async with httpx.AsyncClient(
-                headers=HEADERS,
-                follow_redirects=True,
-                timeout=timeout,
-            ) as client:
-                r = await client.get(feed_url)
-                r.raise_for_status()
-                content = r.content
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code in (403, 401, 406):
-                logger.warning("RssCollector: HTTP error with httpx, falling back to urllib", feed_url=feed_url, status=e.response.status_code)
-                import asyncio
-                def _fetch():
-                    import urllib.request
-                    req = urllib.request.Request(feed_url, headers=HEADERS)
-                    return urllib.request.urlopen(req, timeout=timeout).read()
-                try:
-                    content = await asyncio.to_thread(_fetch)
-                except Exception as fb_err:
-                    logger.error("RssCollector: fallback fetch failed", feed_url=feed_url, error=str(fb_err))
-                    return []
-            else:
-                logger.error("RssCollector: HTTP error", feed_url=feed_url, error=str(e))
-                return []
-        except Exception as e:
-            logger.error("RssCollector: HTTP error", feed_url=feed_url, error=str(e))
+            response = await polite_get(feed_url, accept=_FEED_ACCEPT, timeout=timeout)
+            content = response.content
+        except RobotsDisallowedError:
+            logger.info("RssCollector: skipped (robots.txt)", feed_url=feed_url)
             return []
+        except Exception as e:
+            # Fallback for flaky hosts that block httpx but allow urllib with same UA.
+            logger.warning(
+                "RssCollector: httpx failed, trying urllib fallback",
+                feed_url=feed_url,
+                error=str(e)[:160],
+            )
+            import asyncio
+
+            def _fetch() -> bytes:
+                import urllib.request
+
+                req = urllib.request.Request(
+                    feed_url, headers=default_headers(accept=_FEED_ACCEPT)
+                )
+                return urllib.request.urlopen(req, timeout=timeout).read()
+
+            try:
+                content = await asyncio.to_thread(_fetch)
+            except Exception as fb_err:
+                logger.error(
+                    "RssCollector: fetch failed",
+                    feed_url=feed_url,
+                    error=str(fb_err),
+                )
+                return []
 
         if _looks_like_html(content):
             logger.error(
@@ -154,13 +157,20 @@ class RssCollector(BaseCollector):
 
         json_results = self._parse_json_feed(content, source_config, limit)
         if json_results:
-            logger.info("RssCollector: collected JSON feed", feed_url=feed_url, count=len(json_results))
+            logger.info(
+                "RssCollector: collected JSON feed",
+                feed_url=feed_url,
+                count=len(json_results),
+            )
             return json_results
 
         feed = feedparser.parse(content)
 
         if feed.bozo and not feed.entries:
-            logger.warning("RssCollector: standard parse failed, attempting lxml recovery", feed_url=feed_url)
+            logger.warning(
+                "RssCollector: standard parse failed, attempting lxml recovery",
+                feed_url=feed_url,
+            )
             try:
                 parser = etree.XMLParser(recover=True)
                 root = etree.fromstring(content, parser)
@@ -169,7 +179,9 @@ class RssCollector(BaseCollector):
                 repaired_xml = etree.tostring(root, encoding="unicode")
                 feed = feedparser.parse(repaired_xml)
             except Exception as e:
-                logger.error("RssCollector: recovery failed", feed_url=feed_url, error=str(e))
+                logger.error(
+                    "RssCollector: recovery failed", feed_url=feed_url, error=str(e)
+                )
                 return []
 
         if feed.bozo and not feed.entries:
@@ -186,20 +198,22 @@ class RssCollector(BaseCollector):
             external_id = entry.get("id") or hashlib.sha1(url.encode()).hexdigest()
             content_text = _clean_html(entry.get("summary") or entry.get("description"))
 
-            results.append(NormalizedPost(
-                external_id=external_id,
-                url=url,
-                title=entry.get("title", "(no title)"),
-                content=content_text,
-                summary=None,
-                author=entry.get("author"),
-                published_at=_parse_date(entry),
-                raw_data={
-                    "feed_url": feed_url,
-                    "vendor": source_config.get("vendor"),
-                    "tags": [t.term for t in entry.get("tags", [])],
-                },
-            ))
+            results.append(
+                NormalizedPost(
+                    external_id=external_id,
+                    url=url,
+                    title=entry.get("title", "(no title)"),
+                    content=content_text,
+                    summary=None,
+                    author=entry.get("author"),
+                    published_at=_parse_date(entry),
+                    raw_data={
+                        "feed_url": feed_url,
+                        "vendor": source_config.get("vendor"),
+                        "tags": [t.term for t in entry.get("tags", [])],
+                    },
+                )
+            )
 
         logger.info("RssCollector: collected", feed_url=feed_url, count=len(results))
         return results
@@ -227,9 +241,13 @@ class RssCollector(BaseCollector):
 
             url = item.get("url") or item.get("link") or item.get("canonicalUrl") or ""
             title = item.get("title") or item.get("headline") or item.get("name") or "(no title)"
-            external_id = str(item.get("id") or item.get("guid") or hashlib.sha1(url.encode()).hexdigest())
+            external_id = str(
+                item.get("id") or item.get("guid") or hashlib.sha1(url.encode()).hexdigest()
+            )
             summary = _clean_html(item.get("summary"))
-            content_text = _clean_html(item.get("summary") or item.get("description") or item.get("body"))
+            content_text = _clean_html(
+                item.get("summary") or item.get("description") or item.get("body")
+            )
             published_at = _parse_json_date(
                 item.get("publishedDate") or item.get("pubDate") or item.get("date")
             )

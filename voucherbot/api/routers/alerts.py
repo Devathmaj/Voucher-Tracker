@@ -18,7 +18,11 @@ async def get_alerts(
     stmt = (
         select(Post)
         .options(selectinload(Post.source))
-        .where(Post.status.in_([PostStatus.PROCESSED, PostStatus.QUEUED]))
+        .where(
+            Post.status.in_(
+                [PostStatus.PROCESSED, PostStatus.NOTIFIED, PostStatus.QUEUED]
+            )
+        )
         .where(Post.score >= min_score)
         .order_by(Post.created_at.desc())
         .limit(limit * 3)
@@ -40,6 +44,7 @@ async def get_alerts(
             "source_name": post.source.name if post.source else None,
             "source_type": post.source.type.value if post.source else None,
             "score": post.score,
+            "status": post.status.value,
             "confidence": (post.ai_result or {}).get("confidence"),
             "voucher_code": (post.ai_result or {}).get("voucher_code"),
             "reason": (post.ai_result or {}).get("reason"),

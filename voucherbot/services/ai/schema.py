@@ -19,9 +19,10 @@ class ExtractedEvent(BaseModel):
     that are non-null.
     """
 
-    # Is this content even voucher/promo related?
+    # is_voucher=true on promotional intent even when voucher_code / URLs /
+    # dates are missing — confidence may be low and is not a hard gate.
     is_voucher: bool = False
-    confidence: float = 0.0  # 0.0 – 1.0, AI's own confidence in is_voucher
+    confidence: float = 0.0  # 0.0 – 1.0, belief in is_voucher
 
     # --- Extracted promotion fields ---
     vendor: Optional[str] = None

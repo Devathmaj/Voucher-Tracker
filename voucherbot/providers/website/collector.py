@@ -1,22 +1,13 @@
 from datetime import datetime, timezone
 from typing import Any
 import hashlib
-import httpx
 import structlog
 from bs4 import BeautifulSoup
 
 from voucherbot.providers.base import BaseCollector, NormalizedPost
+from voucherbot.providers.http_policy import polite_get, RobotsDisallowedError
 
 logger = structlog.get_logger(__name__)
-
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-)
-
-HEADERS = {
-    "User-Agent": USER_AGENT
-}
 
 
 class WebsiteCollector(BaseCollector):
@@ -28,6 +19,9 @@ class WebsiteCollector(BaseCollector):
         "title_selector": "h2",             # inside the article
         "link_selector": "a"                # inside the article, for href
     }
+
+    Obeys robots.txt and per-host crawl delays via ``http_policy``. Sources
+    marked ``unsupported`` (ToS / policy block) are skipped entirely.
     """
 
     async def collect(self, source_config: dict[str, Any], limit: int = 50) -> list[NormalizedPost]:
@@ -50,13 +44,14 @@ class WebsiteCollector(BaseCollector):
         timeout = float(source_config.get("timeout_seconds", 15))
         logger.info("WebsiteCollector: fetching", url=url)
         try:
-            async with httpx.AsyncClient(
-                headers=HEADERS,
-                follow_redirects=True,
+            response = await polite_get(
+                url,
+                accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
                 timeout=timeout,
-            ) as client:
-                response = await client.get(url)
-                response.raise_for_status()
+            )
+        except RobotsDisallowedError:
+            logger.info("WebsiteCollector: skipped (robots.txt)", url=url)
+            return []
         except Exception as e:
             logger.error("WebsiteCollector: HTTP error", url=url, error=str(e))
             return []

@@ -1,3 +1,4 @@
+"""Unit tests for collectors — patch polite_get to avoid live network / robots."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -7,6 +8,7 @@ import httpx
 import pytest
 
 from voucherbot.database.bootstrap import SOURCE_DEFINITIONS
+from voucherbot.providers.http_policy import clear_policy_caches, scraper_user_agent
 from voucherbot.providers.rss.collector import (
     RssCollector,
     _looks_like_html,
@@ -75,11 +77,43 @@ MODIFIED_SOURCES = [
     "website:red_hat_training_specials",
 ]
 
+POLICY_BLOCKED = {
+    "rss:cloud_academy_blog",
+    "event:aws_events",
+    "event:aws_reinvent",
+    "event:cisco_live",
+    "website:isc2_blog",
+    "website:red_hat_training_specials",
+}
+
+
+@pytest.fixture(autouse=True)
+def _reset_policy_state(monkeypatch: pytest.MonkeyPatch):
+    clear_policy_caches()
+    monkeypatch.setattr(
+        "voucherbot.providers.http_policy.settings.scraper_respect_robots",
+        False,
+    )
+    monkeypatch.setattr(
+        "voucherbot.providers.http_policy.settings.scraper_min_delay_seconds",
+        0.0,
+    )
+    yield
+    clear_policy_caches()
+
 
 @pytest.mark.parametrize("source_name", MODIFIED_SOURCES)
 def test_modified_source_definition_exists(source_name: str) -> None:
     source = _source_by_name(source_name)
     assert source["name"] == source_name
+
+
+@pytest.mark.parametrize("source_name", sorted(POLICY_BLOCKED))
+def test_policy_blocked_sources_are_unsupported(source_name: str) -> None:
+    source = _source_by_name(source_name)
+    assert source["config"].get("unsupported") is True
+    assert source.get("enabled") is False
+    assert source["config"].get("unsupported_reason")
 
 
 @pytest.mark.parametrize(
@@ -109,12 +143,21 @@ def test_looks_like_html() -> None:
     assert _looks_like_html(SAMPLE_RSS) is False
 
 
+def test_scraper_user_agent_is_identifying() -> None:
+    ua = scraper_user_agent()
+    assert "VoucherBot" in ua
+    assert "Mozilla/5.0" not in ua
+
+
 @pytest.mark.asyncio
 async def test_rss_collector_parses_xml_feed() -> None:
     collector = RssCollector()
     response = _mock_response("https://example.com/feed.xml", content=SAMPLE_RSS)
 
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=response)):
+    with patch(
+        "voucherbot.providers.rss.collector.polite_get",
+        new=AsyncMock(return_value=response),
+    ):
         posts = await collector.collect({"feed_url": "https://example.com/feed.xml"}, limit=5)
 
     assert len(posts) == 1
@@ -125,9 +168,14 @@ async def test_rss_collector_parses_xml_feed() -> None:
 @pytest.mark.asyncio
 async def test_rss_collector_parses_json_feed() -> None:
     collector = RssCollector()
-    response = _mock_response("https://newsroom.example.com/rssfeed.json", content=SAMPLE_JSON)
+    response = _mock_response(
+        "https://newsroom.example.com/rssfeed.json", content=SAMPLE_JSON
+    )
 
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=response)):
+    with patch(
+        "voucherbot.providers.rss.collector.polite_get",
+        new=AsyncMock(return_value=response),
+    ):
         posts = await collector.collect(
             {"feed_url": "https://newsroom.example.com/rssfeed.json"},
             limit=5,
@@ -146,8 +194,13 @@ async def test_rss_collector_rejects_html_response() -> None:
         content=b"<!doctype html><html></html>",
     )
 
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=response)):
-        posts = await collector.collect({"feed_url": "https://cloud.google.com/blog/rss"}, limit=5)
+    with patch(
+        "voucherbot.providers.rss.collector.polite_get",
+        new=AsyncMock(return_value=response),
+    ):
+        posts = await collector.collect(
+            {"feed_url": "https://cloud.google.com/blog/rss"}, limit=5
+        )
 
     assert posts == []
 
@@ -168,17 +221,14 @@ async def test_modified_rss_sources_use_headers_or_are_unsupported(source_name: 
         return
 
     response = _mock_response(config["feed_url"], content=SAMPLE_RSS)
+    mock_get = AsyncMock(return_value=response)
 
-    with patch("httpx.AsyncClient") as mock_client_cls:
-        mock_client = mock_client_cls.return_value
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client.get = AsyncMock(return_value=response)
+    with patch("voucherbot.providers.rss.collector.polite_get", new=mock_get):
         posts = await collector.collect(config, limit=3)
 
     assert len(posts) == 1
-    assert mock_client_cls.call_args.kwargs["headers"]["User-Agent"].startswith("Mozilla/5.0")
-    mock_client.get.assert_awaited_once()
+    mock_get.assert_awaited_once()
+    assert "VoucherBot" in scraper_user_agent()
 
 
 @pytest.mark.asyncio
@@ -199,7 +249,7 @@ async def test_modified_website_sources_scrape_or_are_unsupported(source_name: s
     response = _mock_response(config["url"], text=SAMPLE_HTML)
     mock_get = AsyncMock(return_value=response)
 
-    with patch("httpx.AsyncClient.get", new=mock_get):
+    with patch("voucherbot.providers.website.collector.polite_get", new=mock_get):
         posts = await collector.collect(config, limit=3)
 
     assert len(posts) >= 1
@@ -210,12 +260,15 @@ async def test_modified_website_sources_scrape_or_are_unsupported(source_name: s
 async def test_website_collector_uses_article_text_when_title_selector_misses() -> None:
     collector = WebsiteCollector()
     html = "<html><body><h2>Standalone heading</h2></body></html>"
-    response = _mock_response("https://aws.amazon.com/events/reinvent/", text=html)
+    response = _mock_response("https://example.com/events/", text=html)
 
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=response)):
+    with patch(
+        "voucherbot.providers.website.collector.polite_get",
+        new=AsyncMock(return_value=response),
+    ):
         posts = await collector.collect(
             {
-                "url": "https://aws.amazon.com/events/reinvent/",
+                "url": "https://example.com/events/",
                 "article_selector": "h2",
                 "title_selector": "h2",
                 "link_selector": "a",

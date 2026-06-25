@@ -1,4 +1,7 @@
-"""Verify all bootstrap sources return data or are explicitly marked unsupported."""
+"""Verify all bootstrap sources return data or are explicitly marked unsupported.
+
+Runs sequentially to respect per-host scrape politeness (robots / crawl delay).
+"""
 from __future__ import annotations
 
 import asyncio
@@ -48,11 +51,20 @@ async def verify_source(source: dict) -> dict:
             }
         return {"name": name, "status": "empty", "url": source["base_url"]}
     except Exception as exc:
-        return {"name": name, "status": "error", "error": str(exc), "url": source["base_url"]}
+        return {
+            "name": name,
+            "status": "error",
+            "error": str(exc),
+            "url": source["base_url"],
+        }
 
 
 async def main() -> int:
-    results = await asyncio.gather(*(verify_source(source) for source in SOURCE_DEFINITIONS))
+    # Sequential: avoid parallel hammering of the same hosts during smoke tests.
+    results = []
+    for source in SOURCE_DEFINITIONS:
+        results.append(await verify_source(source))
+
     ok = [result for result in results if result["status"] == "ok"]
     unsupported = [result for result in results if result["status"] == "unsupported"]
     bad = [result for result in results if result["status"] not in {"ok", "unsupported"}]

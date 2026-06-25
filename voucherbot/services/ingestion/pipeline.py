@@ -16,6 +16,10 @@ Stage 3 — Canonical Event Matching
     Score in [possible_match, auto_merge) → POSSIBLE_MATCH (for future review).
     Score < possible_match_threshold → create new canonical Event.
 
+Stage 4 — Email notification
+    On is_voucher for NEW / POSSIBLE_MATCH posts, email settings.email_id via Resend
+    and mark the post NOTIFIED. AUTO_MERGED skips email to avoid duplicate alerts.
+
 All providers produce NormalizedPost objects. Everything after collection
 is provider-agnostic and reused across Reddit, RSS, and Website sources.
 """
@@ -36,8 +40,10 @@ from voucherbot.models.post import Post, PostStatus
 from voucherbot.models.source import Source, SourceType
 from voucherbot.providers.base import BaseCollector, NormalizedPost
 from voucherbot.services.ai.analyzer import analyze_post
+from voucherbot.services.email.notifications import notify_voucher_found
 from voucherbot.services.ingestion.dedup import content_hash, deduplicate_batch
 from voucherbot.services.ingestion.event_matcher import EventMatcher
+from voucherbot.models.event import MatchConfidence
 
 logger = structlog.get_logger(__name__)
 
@@ -213,6 +219,7 @@ async def _process_one_source(
         "events_created": 0,
         "events_attached": 0,
         "possible_matches": 0,
+        "notified": 0,
     }
 
     # ── Stage 0: Collect ──────────────────────────────────────────────────────
@@ -333,9 +340,7 @@ async def _process_one_source(
             continue
 
         # ── Stage 3: Canonical Event Matching ─────────────────────────────────
-        from voucherbot.models.event import MatchConfidence  # avoid circular at module top
-
-        event, confidence = await _event_matcher.match_or_create(
+        _event, confidence = await _event_matcher.match_or_create(
             db, extracted, db_post, source.type
         )
         db_post.status = PostStatus.PROCESSED
@@ -346,6 +351,15 @@ async def _process_one_source(
             stats["possible_matches"] += 1
         else:
             stats["events_attached"] += 1
+
+        # ── Stage 4: Email alert ──────────────────────────────────────────────
+        # Notify on new / uncertain matches. Skip AUTO_MERGED to avoid duplicate
+        # emails when the same known promotion is seen again from another source.
+        if confidence != MatchConfidence.AUTO_MERGED:
+            sent = await notify_voucher_found(db_post, extracted)
+            if sent:
+                db_post.status = PostStatus.NOTIFIED
+                stats["notified"] += 1
 
     # ── Finalise ──────────────────────────────────────────────────────────────
     source.last_checked_utc = datetime.now(timezone.utc)

@@ -2,6 +2,8 @@
 
 Human-readable reference for all official ingestion sources. The **authoritative runtime catalog** is [`voucherbot/database/bootstrap.py`](../voucherbot/database/bootstrap.py), which seeds the database on app startup.
 
+Policy reference: [`deep-research-report (1).md`](../deep-research-report%20(1).md). Collectors prefer RSS/APIs, identify as `VoucherBot`, obey `robots.txt` / Crawl-delay, and skip sources marked `unsupported` (ToS bans HTML scraping).
+
 ## Files
 
 | File | Contents |
@@ -28,6 +30,16 @@ Human-readable reference for all official ingestion sources. The **authoritative
 | RSS / Website | 25 |
 
 Reddit ingestion is gated by `REDDIT_INGESTION_ENABLED` in `.env` (default `false`).
+
+## Policy-blocked HTML sources
+
+These remain in the catalog but are `enabled=false` / `unsupported=true` (RSS alternatives used where available):
+
+- Pluralsight / Cloud Academy blog
+- Cisco Live
+- ISC2 Insights
+- Red Hat Training Specials
+- AWS Events / re:Invent pages
 
 ## Verify sources
 
