@@ -217,6 +217,13 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         vendor="Linux Foundation",
         cadence_minutes=1440,
     ),
+    _feed(
+        "Linux.com",
+        "https://www.linux.com/feed/",
+        SourceType.RSS,
+        vendor="Linux Foundation",
+        cadence_minutes=1440,
+    ),
 
     # Community/forum RSS feeds.
     _feed(

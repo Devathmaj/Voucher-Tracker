@@ -125,6 +125,22 @@ class RssCollector(BaseCollector):
                 r = await client.get(feed_url)
                 r.raise_for_status()
                 content = r.content
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (403, 401, 406):
+                logger.warning("RssCollector: HTTP error with httpx, falling back to urllib", feed_url=feed_url, status=e.response.status_code)
+                import asyncio
+                def _fetch():
+                    import urllib.request
+                    req = urllib.request.Request(feed_url, headers=HEADERS)
+                    return urllib.request.urlopen(req, timeout=timeout).read()
+                try:
+                    content = await asyncio.to_thread(_fetch)
+                except Exception as fb_err:
+                    logger.error("RssCollector: fallback fetch failed", feed_url=feed_url, error=str(fb_err))
+                    return []
+            else:
+                logger.error("RssCollector: HTTP error", feed_url=feed_url, error=str(e))
+                return []
         except Exception as e:
             logger.error("RssCollector: HTTP error", feed_url=feed_url, error=str(e))
             return []
