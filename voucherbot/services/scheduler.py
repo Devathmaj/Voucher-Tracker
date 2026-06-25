@@ -17,6 +17,7 @@ from voucherbot.providers.reddit.client import RedditClient
 from voucherbot.providers.reddit.collector import RedditCollector
 from voucherbot.providers.rss.collector import RssCollector
 from voucherbot.providers.website.collector import WebsiteCollector
+from voucherbot.config.settings import settings
 from voucherbot.services.dispatcher import dispatch_tick
 
 logger = structlog.get_logger(__name__)
@@ -41,7 +42,10 @@ async def tick() -> None:
 
 def start_scheduler() -> None:
     """Register the heartbeat job and start APScheduler."""
-    logger.info("scheduler: starting — DB-driven mode")
+    logger.info(
+        "scheduler: starting — DB-driven mode",
+        reddit_ingestion_enabled=settings.reddit_ingestion_enabled,
+    )
 
     scheduler.add_job(
         tick,

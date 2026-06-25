@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from voucherbot.config.settings import settings
 from voucherbot.models.pipeline_lock import PipelineLock
-from voucherbot.models.source import Source
+from voucherbot.models.source import Source, SourceType
 from voucherbot.providers.base import BaseCollector
 from voucherbot.services.ingestion.pipeline import run_pipeline_for_source
 
@@ -92,13 +92,17 @@ async def _release_lease(session: AsyncSession) -> None:
 
 async def _pick_due_source(session: AsyncSession) -> Source | None:
     now = datetime.now(timezone.utc)
+    filters = [
+        Source.enabled.is_(True),
+        or_(Source.next_due_at.is_(None), Source.next_due_at <= now),
+        or_(Source.backoff_until.is_(None), Source.backoff_until <= now),
+    ]
+    if not settings.reddit_ingestion_enabled:
+        filters.append(Source.type != SourceType.REDDIT)
+
     result = await session.execute(
         select(Source)
-        .where(
-            Source.enabled.is_(True),
-            or_(Source.next_due_at.is_(None), Source.next_due_at <= now),
-            or_(Source.backoff_until.is_(None), Source.backoff_until <= now),
-        )
+        .where(*filters)
         .order_by(Source.next_due_at.asc().nulls_first(), Source.priority_tier.asc())
         .limit(1)
         .with_for_update(skip_locked=True)

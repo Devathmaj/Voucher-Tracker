@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     reddit_fetch_interval_minutes: int = 3
     reddit_concurrency_limit: int = 5
     reddit_fetch_limit: int = 25
+    reddit_ingestion_enabled: bool = False
 
     # DB-driven scheduler
     tick_lease_ttl_seconds: int = 90

@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 import structlog
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
 
 from voucherbot.database.connection import AsyncSessionLocal
@@ -72,19 +73,18 @@ HIGH_SIGNAL_REDDIT_SUBREDDITS = [
     "kubernetes",
     "googlecloud",
     "OracleCloud",
-    "freebies",
-    "deals",
     "eFreebies",
     "FREE",
     "Udemy",
     "FreeUdemyCoupons",
 ]
 
+# Removed from catalog — too noisy for cert-voucher signal.
+DISABLED_REDDIT_SUBREDDITS = {"deals", "freebies"}
+
 TIER_A_REDDIT_SUBS = {
     "AWSCertifications",
     "AzureCertification",
-    "freebies",
-    "deals",
     "eFreebies",
     "FREE",
     "Udemy",
@@ -483,6 +483,13 @@ async def bootstrap_data() -> None:
                     config=source["config"],
                 )
                 .on_conflict_do_nothing(index_elements=["name"])
+            )
+
+        for sub in DISABLED_REDDIT_SUBREDDITS:
+            await session.execute(
+                update(Source)
+                .where(Source.name == f"reddit:{sub.lower()}")
+                .values(enabled=False)
             )
 
         await session.commit()

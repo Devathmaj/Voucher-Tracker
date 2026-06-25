@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -220,3 +220,22 @@ async def test_mark_failure_applies_backoff() -> None:
     assert source.next_due_at == source.backoff_until
     assert source.backoff_until >= before + timedelta(minutes=10)
     session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_pick_due_source_skips_reddit_when_disabled(monkeypatch) -> None:
+    from voucherbot.services.dispatcher import _pick_due_source
+
+    monkeypatch.setattr("voucherbot.services.dispatcher.settings.reddit_ingestion_enabled", False)
+
+    session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    session.execute = AsyncMock(return_value=mock_result)
+
+    await _pick_due_source(session)
+
+    stmt = session.execute.call_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "REDDIT" in compiled.upper()
+    assert "!=" in compiled or "<>" in compiled
