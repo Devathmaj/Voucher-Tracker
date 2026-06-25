@@ -1,0 +1,10 @@
+# Website scrapers (WEBSITE type)
+# Fetch limit: 25 items per poll
+# Format: [tier] type | db_name | poll_min | url
+
+[C] WEBSITE | rss:cloud_academy_blog | 240 min | https://www.pluralsight.com/resources/blog
+[D] WEBSITE | website:comptia_offers | 720 min | https://www.comptia.org/en-us/blog/
+[D] WEBSITE | website:isc2_blog | 720 min | https://www.isc2.org/Insights
+[D] WEBSITE | website:red_hat_training_specials | 720 min | https://www.redhat.com/en/services/training/specials
+[C] WEBSITE | website:msfthub_vouchers | 240 min | https://msfthub.com/vouchers/
+[C] WEBSITE | website:vladtalkstech | 240 min | https://vladtalkstech.com/

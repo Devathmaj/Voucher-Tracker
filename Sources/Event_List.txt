@@ -1,0 +1,10 @@
+# Event pages (EVENT type)
+# Fetch limit: 25 items per poll
+# Format: [tier] type | db_name | poll_min | url
+
+[D] EVENT | event:microsoft_cloud_skills_challenge | 720 min | https://learn.microsoft.com/training/challenges
+[D] EVENT | event:aws_events | 720 min | https://aws.amazon.com/events/
+[D] EVENT | event:aws_reinvent | 720 min | https://aws.amazon.com/events/reinvent/
+[D] EVENT | event:google_cloud_events | 720 min | https://cloud.google.com/events
+[D] EVENT | event:google_cloud_next | 720 min | https://cloud.withgoogle.com/next
+[D] EVENT | event:cisco_live | 720 min | https://www.ciscolive.com/global.html

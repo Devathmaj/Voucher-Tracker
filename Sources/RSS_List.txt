@@ -1,7 +1,23 @@
-# Application Database Seed RSS Feeds (from scripts/bootstrap_sources.py)
-1. AWS Builder: https://builder.aws.com/rss.xml
-2. Microsoft Blogs: https://blogs.microsoft.com/feed/
-3. Microsoft Learn Blog: https://techcommunity.microsoft.com/t5/microsoft-learn-blog/bg-p/MicrosoftLearnBlog/rss
-4. Linux.com: https://www.linux.com/feed/
-5. TechExams: https://community.techexams.net/discussions/feed.rss
-6. InfoSec Institute: https://community.infosecinstitute.com/discussions/feed.rss
+# RSS / Atom / JSON feeds (BLOG, RSS, FORUM)
+# Fetch limit: 25 items per poll
+# Format: [tier] type | db_name | poll_min | url
+
+[B] BLOG | blog:aws_training_and_certification_blog | 60 min | https://aws.amazon.com/blogs/training-and-certification/feed/
+[B] BLOG | blog:aws_training_announcements | 60 min | https://aws.amazon.com/blogs/training-and-certification/category/post-types/announcements/feed/
+[B] RSS | rss:aws_builder | 60 min | https://builder.aws.com/rss.xml
+[B] BLOG | blog:microsoft_learn_blog | 60 min | https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/Community?interaction.style=blog&labels=Microsoft+Learn+Blog
+[B] BLOG | blog:google_cloud_blog | 60 min | https://cloudblog.withgoogle.com/rss/
+[B] BLOG | blog:cisco_newsroom | 60 min | https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json
+[B] BLOG | blog:red_hat_blog | 60 min | https://www.redhat.com/en/rss/blog
+[B] BLOG | blog:linux_foundation_blog | 60 min | https://www.linuxfoundation.org/blog/rss.xml
+[B] RSS | rss:linux.com | 60 min | https://www.linux.com/feed/
+[C] FORUM | forum:microsoft_learn_qanda_voucher_search | 240 min | https://learn.microsoft.com/api/search/rss?search=voucher+certification+exam&locale=en-us
+[C] FORUM | forum:google_cloud_training_group | 240 min | https://discuss.google.dev/c/google-cloud/cloud-announcements/172.rss
+[B] BLOG | blog:microsoft_events | 60 min | https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=azure-events
+[C] RSS | rss:tutorials_dojo | 240 min | https://tutorialsdojo.com/feed/
+[C] RSS | rss:packet_pilot | 240 min | https://packetpilot.com/feed/
+[B] RSS | rss:microsoft_blog | 60 min | https://blogs.microsoft.com/feed
+[B] RSS | rss:cisco_newsroom | 60 min | https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json
+[B] RSS | rss:cisco_newsroom_security | 60 min | https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json?feed=security
+[B] RSS | rss:cisco_newsroom_press | 60 min | https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json?feed=press-releases
+[D] BLOG | blog:oracle_university_blog | 720 min | https://feeds.libsyn.com/459162/rss
