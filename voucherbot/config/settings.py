@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     reddit_concurrency_limit: int = 5
     reddit_fetch_limit: int = 25
 
+    # DB-driven scheduler
+    tick_lease_ttl_seconds: int = 90
+    tick_job_timeout_seconds: int = 45
+    source_backoff_base_minutes: int = 5
+    source_backoff_max_minutes: int = 360
+
     # AI providers
     gemini_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None

@@ -80,6 +80,28 @@ HIGH_SIGNAL_REDDIT_SUBREDDITS = [
     "FreeUdemyCoupons",
 ]
 
+TIER_A_REDDIT_SUBS = {
+    "AWSCertifications",
+    "AzureCertification",
+    "freebies",
+    "deals",
+    "eFreebies",
+    "FREE",
+    "Udemy",
+    "FreeUdemyCoupons",
+}
+
+_TIER_CADENCE_MINUTES = {
+    "A": 15,
+    "B": 60,
+    "C": 240,
+    "D": 720,
+}
+
+
+def _reddit_tier(sub: str) -> str:
+    return "A" if sub in TIER_A_REDDIT_SUBS else "B"
+
 
 def _source_name(source_type: SourceType, label: str) -> str:
     slug = (
@@ -98,16 +120,18 @@ def _feed(
     source_type: SourceType = SourceType.RSS,
     *,
     vendor: str | None = None,
-    cadence_minutes: int = 1440,
+    priority_tier: str = "B",
+    cadence_minutes: int | None = None,
     priority: int = 1,
     query_terms: list[str] | None = None,
     note: str | None = None,
 ) -> dict[str, Any]:
+    interval = cadence_minutes if cadence_minutes is not None else _TIER_CADENCE_MINUTES[priority_tier]
     config: dict[str, Any] = {
         "feed_url": feed_url,
         "vendor": vendor,
         "query_terms": query_terms or DEFAULT_QUERY_TERMS,
-        "poll_interval_minutes": cadence_minutes,
+        "poll_interval_minutes": interval,
     }
     if note:
         config["note"] = note
@@ -116,6 +140,7 @@ def _feed(
         "type": source_type,
         "base_url": feed_url,
         "priority": priority,
+        "priority_tier": priority_tier,
         "config": config,
     }
 
@@ -129,11 +154,13 @@ def _page(
     article_selector: str = "article, main li, .card, .event-card",
     title_selector: str = "h1, h2, h3, a",
     link_selector: str = "a",
-    cadence_minutes: int = 10080,
+    priority_tier: str = "D",
+    cadence_minutes: int | None = None,
     priority: int = 1,
     query_terms: list[str] | None = None,
     note: str | None = None,
 ) -> dict[str, Any]:
+    interval = cadence_minutes if cadence_minutes is not None else _TIER_CADENCE_MINUTES[priority_tier]
     config: dict[str, Any] = {
         "url": url,
         "vendor": vendor,
@@ -141,7 +168,7 @@ def _page(
         "title_selector": title_selector,
         "link_selector": link_selector,
         "query_terms": query_terms or DEFAULT_QUERY_TERMS,
-        "poll_interval_minutes": cadence_minutes,
+        "poll_interval_minutes": interval,
     }
     if note:
         config["note"] = note
@@ -150,25 +177,24 @@ def _page(
         "type": source_type,
         "base_url": url,
         "priority": priority,
+        "priority_tier": priority_tier,
         "config": config,
     }
 
 
 SOURCE_DEFINITIONS: list[dict[str, Any]] = [
-    # Official vendor RSS/blog feeds.
+    # Official vendor RSS/blog feeds (Tier B).
     _feed(
         "AWS Training and Certification Blog",
         "https://aws.amazon.com/blogs/training-and-certification/feed/",
         SourceType.BLOG,
         vendor="AWS",
-        cadence_minutes=1440,
     ),
     _feed(
         "AWS Training Announcements",
         "https://aws.amazon.com/blogs/training-and-certification/category/post-types/announcements/feed/",
         SourceType.BLOG,
         vendor="AWS",
-        cadence_minutes=1440,
         priority=2,
     ),
     _feed(
@@ -176,7 +202,6 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         "https://builder.aws.com/rss.xml",
         SourceType.RSS,
         vendor="AWS",
-        cadence_minutes=1440,
         priority=2,
     ),
     _feed(
@@ -187,51 +212,45 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         ),
         SourceType.BLOG,
         vendor="Microsoft",
-        cadence_minutes=1440,
     ),
     _feed(
         "Google Cloud Blog",
         "https://cloudblog.withgoogle.com/rss/",
         SourceType.BLOG,
         vendor="Google Cloud",
-        cadence_minutes=1440,
     ),
     _feed(
         "Cisco Newsroom",
         "https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json",
         SourceType.BLOG,
         vendor="Cisco",
-        cadence_minutes=1440,
     ),
     _feed(
         "Red Hat Blog",
         "https://www.redhat.com/en/rss/blog",
         SourceType.BLOG,
         vendor="Red Hat",
-        cadence_minutes=1440,
     ),
     _feed(
         "Linux Foundation Blog",
         "https://www.linuxfoundation.org/blog/rss.xml",
         SourceType.BLOG,
         vendor="Linux Foundation",
-        cadence_minutes=1440,
     ),
     _feed(
         "Linux.com",
         "https://www.linux.com/feed/",
         SourceType.RSS,
         vendor="Linux Foundation",
-        cadence_minutes=1440,
     ),
 
-    # Community/forum RSS feeds.
+    # Community/forum RSS feeds (Tier C).
     _feed(
         "Microsoft Learn Q&A Voucher Search",
         "https://learn.microsoft.com/api/search/rss?search=voucher+certification+exam&locale=en-us",
         SourceType.FORUM,
         vendor="Microsoft",
-        cadence_minutes=10080,
+        priority_tier="C",
         priority=2,
     ),
     _feed(
@@ -239,7 +258,7 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         "https://discuss.google.dev/c/google-cloud/cloud-announcements/172.rss",
         SourceType.FORUM,
         vendor="Google Cloud",
-        cadence_minutes=10080,
+        priority_tier="C",
         note=(
             "Migrated from Google Groups to discuss.google.dev. "
             "Category 172 = Cloud Announcements."
@@ -250,18 +269,30 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=azure-events",
         SourceType.BLOG,
         vendor="Microsoft",
-        cadence_minutes=1440,
         priority=2,
     ),
 
-    # Aggregator blogs called out in the report.
-    _feed("Tutorials Dojo", "https://tutorialsdojo.com/feed/", SourceType.RSS, vendor="Tutorials Dojo"),
-    _feed("Packet Pilot", "https://packetpilot.com/feed/", SourceType.RSS, vendor="Packet Pilot"),
+    # Aggregator blogs (Tier C).
+    _feed(
+        "Tutorials Dojo",
+        "https://tutorialsdojo.com/feed/",
+        SourceType.RSS,
+        vendor="Tutorials Dojo",
+        priority_tier="C",
+    ),
+    _feed(
+        "Packet Pilot",
+        "https://packetpilot.com/feed/",
+        SourceType.RSS,
+        vendor="Packet Pilot",
+        priority_tier="C",
+    ),
     {
         "name": "rss:cloud_academy_blog",
         "type": SourceType.WEBSITE,
         "base_url": "https://www.pluralsight.com/resources/blog",
         "priority": 1,
+        "priority_tier": "C",
         "config": {
             "collector": "website",
             "url": "https://www.pluralsight.com/resources/blog",
@@ -274,7 +305,7 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
                 "- inspect live page if 0 items returned."
             ),
             "query_terms": DEFAULT_QUERY_TERMS,
-            "poll_interval_minutes": 10080,
+            "poll_interval_minutes": 240,
         },
     },
     _feed(
@@ -282,38 +313,33 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         "https://blogs.microsoft.com/feed",
         SourceType.RSS,
         vendor="Microsoft",
-        cadence_minutes=1440,
     ),
     _feed(
         "Cisco Newsroom",
         "https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json",
         SourceType.RSS,
         vendor="Cisco",
-        cadence_minutes=1440,
     ),
     _feed(
         "Cisco Newsroom Security",
         "https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json?feed=security",
         SourceType.RSS,
         vendor="Cisco",
-        cadence_minutes=1440,
     ),
     _feed(
         "Cisco Newsroom Press",
         "https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json?feed=press-releases",
         SourceType.RSS,
         vendor="Cisco",
-        cadence_minutes=1440,
     ),
 
-    # Official vendor/event pages.
+    # Official vendor/event pages (Tier D).
     _page(
         "Microsoft Cloud Skills Challenge",
         "https://learn.microsoft.com/training/challenges",
         SourceType.EVENT,
         vendor="Microsoft",
         article_selector="article, .card, li, main section",
-        cadence_minutes=10080,
     ),
     _page(
         "AWS Events",
@@ -322,7 +348,6 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         vendor="AWS",
         article_selector=".lb-content-item, article, .card",
         title_selector="h2, h3, a",
-        cadence_minutes=10080,
     ),
     _page(
         "AWS reInvent",
@@ -331,7 +356,6 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         vendor="AWS",
         article_selector="main section, main",
         title_selector="h2, h3",
-        cadence_minutes=10080,
     ),
     _page(
         "Google Cloud Events",
@@ -339,7 +363,6 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         SourceType.EVENT,
         vendor="Google Cloud",
         article_selector="article, .event-item, .card",
-        cadence_minutes=10080,
     ),
     _page(
         "Google Cloud Next",
@@ -347,7 +370,6 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         SourceType.EVENT,
         vendor="Google Cloud",
         article_selector="article, .card, main section",
-        cadence_minutes=10080,
     ),
     _page(
         "Cisco Live",
@@ -356,7 +378,6 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         vendor="Cisco",
         article_selector=".cmp-teaser, article, .card",
         title_selector="h2, h3, a",
-        cadence_minutes=10080,
     ),
     _page(
         "CompTIA Offers",
@@ -366,21 +387,19 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         article_selector="main li",
         title_selector="a",
         link_selector="a",
-        cadence_minutes=10080,
     ),
     _page(
         "ISC2 Blog",
         "https://www.isc2.org/Insights",
         SourceType.WEBSITE,
         vendor="ISC2",
-        cadence_minutes=10080,
     ),
     _feed(
         "Oracle University Blog",
         "https://feeds.libsyn.com/459162/rss",
         SourceType.BLOG,
         vendor="Oracle",
-        cadence_minutes=10080,
+        priority_tier="D",
         note=(
             "Podcast RSS - blog /rss is 403. Podcast actively covers Race to "
             "Certification and free exam promos."
@@ -394,10 +413,9 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         article_selector="article, .card, main section, main li",
         title_selector="h2, h3, a",
         link_selector="a",
-        cadence_minutes=10080,
     ),
 
-    # Aggregators without reliable known feeds.
+    # Aggregators without reliable known feeds (Tier C).
     _page(
         "MSFTHub Vouchers",
         "https://msfthub.com/vouchers/",
@@ -406,10 +424,16 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         article_selector="li",
         title_selector="span",
         link_selector="a",
-        cadence_minutes=1440,
+        priority_tier="C",
         priority=2,
     ),
-    _page("VladTalksTech", "https://vladtalkstech.com/", SourceType.WEBSITE, vendor="VladTalksTech"),
+    _page(
+        "VladTalksTech",
+        "https://vladtalkstech.com/",
+        SourceType.WEBSITE,
+        vendor="VladTalksTech",
+        priority_tier="C",
+    ),
 ]
 
 
@@ -425,6 +449,8 @@ async def bootstrap_data() -> None:
             )
 
         for sub in HIGH_SIGNAL_REDDIT_SUBREDDITS:
+            tier = _reddit_tier(sub)
+            cadence = _TIER_CADENCE_MINUTES[tier]
             await session.execute(
                 insert(Source)
                 .values(
@@ -432,11 +458,12 @@ async def bootstrap_data() -> None:
                     type=SourceType.REDDIT,
                     base_url=f"https://www.reddit.com/r/{sub}",
                     enabled=True,
-                    priority=2,
+                    priority=1 if tier == "A" else 2,
+                    priority_tier=tier,
                     config={
                         "subreddit": sub,
                         "query_terms": DEFAULT_QUERY_TERMS,
-                        "poll_interval_minutes": 1440,
+                        "poll_interval_minutes": cadence,
                         "auth_mode": "praw_or_rss",
                     },
                 )
@@ -452,6 +479,7 @@ async def bootstrap_data() -> None:
                     base_url=source["base_url"],
                     enabled=True,
                     priority=source.get("priority", 1),
+                    priority_tier=source.get("priority_tier", "C"),
                     config=source["config"],
                 )
                 .on_conflict_do_nothing(index_elements=["name"])

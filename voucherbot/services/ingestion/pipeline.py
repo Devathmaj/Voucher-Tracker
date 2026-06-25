@@ -48,6 +48,58 @@ SCORE_THRESHOLD = 1
 _event_matcher = EventMatcher()
 
 
+def _resolve_collector(
+    source: Source,
+    collectors: dict[str, BaseCollector],
+) -> BaseCollector | None:
+    config = source.config or {}
+    if source.type == SourceType.REDDIT:
+        return collectors.get("reddit")
+    if "feed_url" in config:
+        return collectors.get("rss")
+    if "article_selector" in config:
+        return collectors.get("web")
+    return None
+
+
+def _fetch_limit_for_source(source: Source, fetch_limit: int | None = None) -> int:
+    if fetch_limit is not None:
+        return fetch_limit
+    if source.type == SourceType.REDDIT:
+        return settings.reddit_fetch_limit
+    return 25
+
+
+async def run_pipeline_for_source(
+    db: AsyncSession,
+    source: Source,
+    collectors: dict[str, BaseCollector],
+    fetch_limit: int | None = None,
+) -> dict:
+    """Run the full ingestion pipeline for a single source."""
+    sync_id = f"Sync-{str(uuid.uuid4())[:8]}"
+    start_time = datetime.now(timezone.utc)
+    limit = _fetch_limit_for_source(source, fetch_limit)
+
+    collector = _resolve_collector(source, collectors)
+    if not collector:
+        logger.error(f"{sync_id} No suitable collector found for {source.name}")
+        return {"errors": 1}
+
+    kw_result = await db.execute(select(Keyword).where(Keyword.enabled == True))  # noqa: E712
+    keywords: list[Keyword] = kw_result.scalars().all()
+
+    stats = await _process_one_source(db, source, collector, keywords, limit)
+
+    duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+    logger.info(
+        f"{sync_id} [{source.name}] complete",
+        duration=f"{duration:.1f}s",
+        **stats,
+    )
+    return stats
+
+
 async def run_pipeline(
     db: AsyncSession,
     source_type: SourceType,
@@ -90,15 +142,7 @@ async def run_pipeline(
     async def process_source(source: Source) -> None:
         async with semaphore:
             try:
-                config = source.config or {}
-                collector: BaseCollector | None = None
-                if source.type == SourceType.REDDIT:
-                    collector = collectors.get("reddit")
-                elif "feed_url" in config:
-                    collector = collectors.get("rss")
-                elif "article_selector" in config:
-                    collector = collectors.get("web")
-
+                collector = _resolve_collector(source, collectors)
                 if not collector:
                     logger.error(f"{sync_id} No suitable collector found for {source.name}")
                     stats["errors"] += 1
