@@ -10,6 +10,8 @@ Certification voucher aggregator — collects from RSS, vendor blogs, event page
 
 With `IS_PROD=false`, startup creates missing tables and seeds sources/keywords. With `IS_PROD=true`, that is skipped — apply schema via `alembic upgrade head` (admin role) before deploying; the app role should only need DML on existing tables.
 
+**Schema is frozen** at Alembic revision `g3b9c0d1e2f3`. See [`docs/SCHEMA.md`](docs/SCHEMA.md).
+
 ## Source catalog
 
 Official sources are documented in [`sources/`](sources/) and seeded via [`voucherbot/database/bootstrap.py`](voucherbot/database/bootstrap.py) when `IS_PROD=false`.
