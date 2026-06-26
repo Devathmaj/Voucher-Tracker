@@ -292,15 +292,14 @@ async def _process_one_source(
             .on_conflict_do_nothing(constraint="uq_posts_source_external")
         )
         
-        # In SQLAlchemy async, we must manage the savepoint ourselves if we
-        # expect to catch and survive IntegrityErrors inside a transaction.
-        async with db.begin_nested():
-            try:
+        try:
+            async with db.begin_nested():
                 result = await db.execute(stmt)
-            except IntegrityError:
-                # Caught uq_posts_content_hash violation
-                stats["doc_duplicates"] += 1
-                continue
+        except IntegrityError:
+            # Caught uq_posts_content_hash violation; the savepoint has already
+            # been rolled back, so the outer pipeline transaction can continue.
+            stats["doc_duplicates"] += 1
+            continue
 
         if result.rowcount == 0:
             # Caught uq_posts_source_external via ON CONFLICT DO NOTHING

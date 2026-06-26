@@ -11,6 +11,7 @@ Usage:
     )
 """
 import asyncio
+import time
 import structlog
 from typing import Optional
 
@@ -19,6 +20,8 @@ from voucherbot.config.settings import settings
 logger = structlog.get_logger(__name__)
 
 _initialized = False
+_send_lock = asyncio.Lock()
+_last_send_at = 0.0
 
 
 def _init() -> None:
@@ -69,10 +72,23 @@ async def send_email(
         params["text"] = text
 
     try:
-        def _send() -> dict:
-            return resend.Emails.send(params)
+        async with _send_lock:
+            global _last_send_at
+            elapsed = time.monotonic() - _last_send_at
+            delay = settings.email_min_interval_seconds - elapsed
+            if delay > 0:
+                logger.info(
+                    "email.sender: throttling",
+                    delay_seconds=round(delay, 2),
+                    to=to,
+                )
+                await asyncio.sleep(delay)
 
-        result = await asyncio.to_thread(_send)
+            def _send() -> dict:
+                return resend.Emails.send(params)
+
+            result = await asyncio.to_thread(_send)
+            _last_send_at = time.monotonic()
         logger.info("email.sender: sent", to=to, subject=subject, id=result.get("id"))
         return result
 

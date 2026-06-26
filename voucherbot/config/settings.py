@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     resend_api_key: Optional[str] = None
     email_from: str = "VoucherBot <onboarding@resend.dev>"
     email_id: Optional[str] = None
+    email_min_interval_seconds: float = 5.0
 
     # Reddit
     reddit_client_id: Optional[str] = None

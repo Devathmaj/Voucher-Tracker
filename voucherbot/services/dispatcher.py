@@ -10,11 +10,10 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import structlog
-from sqlalchemy import or_, select, update
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voucherbot.config.settings import settings
-from voucherbot.models.pipeline_lock import PipelineLock
 from voucherbot.models.source import Source, SourceType
 from voucherbot.providers.base import BaseCollector
 from voucherbot.services.ingestion.pipeline import run_pipeline_for_source
@@ -63,17 +62,35 @@ async def _acquire_lease(session: AsyncSession, holder_id: str) -> bool:
     now = datetime.now(timezone.utc)
     expires_at = now + ttl
 
+    await session.execute(
+        text(
+            """
+            INSERT INTO pipeline_lock (name, holder, acquired_at, expires_at)
+            VALUES (:lock_name, NULL, NULL, NULL)
+            ON CONFLICT (name) DO NOTHING
+            """
+        ),
+        {"lock_name": LOCK_NAME},
+    )
+
     result = await session.execute(
-        update(PipelineLock)
-        .where(
-            PipelineLock.name == LOCK_NAME,
-            or_(
-                PipelineLock.holder.is_(None),
-                PipelineLock.expires_at < now,
-            ),
-        )
-        .values(holder=holder_id, acquired_at=now, expires_at=expires_at)
-        .returning(PipelineLock.name)
+        text(
+            """
+            UPDATE pipeline_lock
+            SET holder = :holder_id,
+                acquired_at = :now,
+                expires_at = :expires_at
+            WHERE name = :lock_name
+              AND (holder IS NULL OR expires_at < :now)
+            RETURNING name
+            """
+        ),
+        {
+            "holder_id": holder_id,
+            "now": now,
+            "expires_at": expires_at,
+            "lock_name": LOCK_NAME,
+        },
     )
     acquired = result.scalar_one_or_none() is not None
     if acquired:
@@ -83,9 +100,16 @@ async def _acquire_lease(session: AsyncSession, holder_id: str) -> bool:
 
 async def _release_lease(session: AsyncSession) -> None:
     await session.execute(
-        update(PipelineLock)
-        .where(PipelineLock.name == LOCK_NAME)
-        .values(holder=None, acquired_at=None, expires_at=None)
+        text(
+            """
+            UPDATE pipeline_lock
+            SET holder = NULL,
+                acquired_at = NULL,
+                expires_at = NULL
+            WHERE name = :lock_name
+            """
+        ),
+        {"lock_name": LOCK_NAME},
     )
     await session.commit()
 
@@ -117,10 +141,34 @@ async def _mark_success(
 ) -> None:
     now = datetime.now(timezone.utc)
     interval = poll_interval_minutes(source)
-    source.next_due_at = now + timedelta(minutes=interval)
+    avg_runtime_ms = rolling_avg_runtime_ms(source.avg_runtime_ms, elapsed_ms)
+    next_due_at = now + timedelta(minutes=interval)
+    source.last_checked_utc = now
+    source.next_due_at = next_due_at
     source.consecutive_failures = 0
     source.backoff_until = None
-    source.avg_runtime_ms = rolling_avg_runtime_ms(source.avg_runtime_ms, elapsed_ms)
+    source.avg_runtime_ms = avg_runtime_ms
+    source.error_count = 0
+    await session.execute(
+        text(
+            """
+            UPDATE sources
+            SET last_checked_utc = :now,
+                next_due_at = :next_due_at,
+                consecutive_failures = 0,
+                backoff_until = NULL,
+                avg_runtime_ms = :avg_runtime_ms,
+                error_count = 0
+            WHERE id = :source_id
+            """
+        ),
+        {
+            "now": now,
+            "next_due_at": next_due_at,
+            "avg_runtime_ms": avg_runtime_ms,
+            "source_id": source.id,
+        },
+    )
     await session.commit()
 
 
@@ -133,12 +181,33 @@ async def _mark_failure(
     failures = (source.consecutive_failures or 0) + 1
     backoff_minutes = compute_backoff_minutes(failures)
     backoff_until = now + timedelta(minutes=backoff_minutes)
-
+    avg_runtime_ms = rolling_avg_runtime_ms(source.avg_runtime_ms, elapsed_ms)
+    error_count = (source.error_count or 0) + 1
     source.consecutive_failures = failures
     source.backoff_until = backoff_until
     source.next_due_at = backoff_until
-    source.avg_runtime_ms = rolling_avg_runtime_ms(source.avg_runtime_ms, elapsed_ms)
-    source.error_count = (source.error_count or 0) + 1
+    source.avg_runtime_ms = avg_runtime_ms
+    source.error_count = error_count
+    await session.execute(
+        text(
+            """
+            UPDATE sources
+            SET consecutive_failures = :failures,
+                backoff_until = :backoff_until,
+                next_due_at = :backoff_until,
+                avg_runtime_ms = :avg_runtime_ms,
+                error_count = :error_count
+            WHERE id = :source_id
+            """
+        ),
+        {
+            "failures": failures,
+            "backoff_until": backoff_until,
+            "avg_runtime_ms": avg_runtime_ms,
+            "error_count": error_count,
+            "source_id": source.id,
+        },
+    )
     await session.commit()
 
 
@@ -164,6 +233,11 @@ async def dispatch_tick(
 
         start = datetime.now(timezone.utc)
         source_name = source.name
+        failure_source = Source()
+        failure_source.id = source.id
+        failure_source.consecutive_failures = source.consecutive_failures
+        failure_source.error_count = source.error_count
+        failure_source.avg_runtime_ms = source.avg_runtime_ms
 
         try:
             async with asyncio.timeout(settings.tick_job_timeout_seconds):
@@ -179,7 +253,8 @@ async def dispatch_tick(
             return {"status": "ran", "source": source_name, "elapsed_ms": elapsed_ms, **stats}
         except Exception as exc:
             elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
-            await _mark_failure(session, source, elapsed_ms)
+            await session.rollback()
+            await _mark_failure(session, failure_source, elapsed_ms)
             logger.error(
                 "dispatcher: tick failed",
                 source=source_name,
@@ -193,4 +268,5 @@ async def dispatch_tick(
                 "error": str(exc),
             }
     finally:
+        await session.rollback()
         await _release_lease(session)
