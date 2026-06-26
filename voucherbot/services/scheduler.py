@@ -1,29 +1,31 @@
-"""
-Background scheduler — DB-driven single heartbeat.
+"""Background scheduler: DB-driven single heartbeat.
 
-A single 2-minute APScheduler job calls the dispatcher in-process. Postgres
-owns queue ordering (next_due_at, priority_tier) and concurrency (pipeline_lock).
+A single APScheduler job calls the dispatcher in-process. Postgres owns queue
+ordering, source lease state, and cross-process concurrency through
+``pipeline_lock``.
 """
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 import structlog
 
+from voucherbot.config.settings import settings
 from voucherbot.database.connection import AsyncSessionLocal
 from voucherbot.providers.reddit.client import RedditClient
 from voucherbot.providers.reddit.collector import RedditCollector
 from voucherbot.providers.rss.collector import RssCollector
 from voucherbot.providers.website.collector import WebsiteCollector
-from voucherbot.config.settings import settings
 from voucherbot.services.dispatcher import dispatch_tick
 
 logger = structlog.get_logger(__name__)
 
 scheduler = AsyncIOScheduler()
 _reddit_client = RedditClient()
+_active_ticks: set[asyncio.Task] = set()
 
 _collectors = {
     "reddit": RedditCollector(_reddit_client),
@@ -33,17 +35,25 @@ _collectors = {
 
 
 async def tick() -> None:
-    """Single heartbeat — dispatch one source per call."""
+    """Dispatch one due source and track it for graceful shutdown."""
+    task = asyncio.current_task()
+    if task is not None:
+        _active_ticks.add(task)
+
     holder_id = str(uuid.uuid4())[:8]
-    async with AsyncSessionLocal() as session:
-        result = await dispatch_tick(session, _collectors, holder_id)
-    logger.info("scheduler: tick complete", **result)
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await dispatch_tick(session, _collectors, holder_id)
+        logger.info("scheduler: tick complete", **result)
+    finally:
+        if task is not None:
+            _active_ticks.discard(task)
 
 
 def start_scheduler() -> None:
     """Register the heartbeat job and start APScheduler."""
     logger.info(
-        "scheduler: starting — DB-driven mode",
+        "scheduler: starting - DB-driven mode",
         reddit_ingestion_enabled=settings.reddit_ingestion_enabled,
     )
 
@@ -62,7 +72,10 @@ def start_scheduler() -> None:
 
 
 async def stop_scheduler() -> None:
-    """Gracefully stop the scheduler and close the Reddit client."""
+    """Stop scheduling new work, then wait for any running tick."""
     logger.info("scheduler: shutting down")
     scheduler.shutdown(wait=False)
+    if _active_ticks:
+        logger.info("scheduler: waiting for active ticks", count=len(_active_ticks))
+        await asyncio.gather(*list(_active_ticks), return_exceptions=True)
     await _reddit_client.close()

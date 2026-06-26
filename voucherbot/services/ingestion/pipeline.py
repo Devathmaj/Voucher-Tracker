@@ -320,6 +320,7 @@ async def _process_one_source(
 
     # ── Stage 2: AI Extraction ────────────────────────────────────────────────
     # Only runs on posts that survived Stage 1.
+    pending_notifications = []
     for post, db_post in inserted_posts:
         extracted = await analyze_post(title=post.title, content=post.content)
         if extracted is None:
@@ -352,18 +353,24 @@ async def _process_one_source(
         else:
             stats["events_attached"] += 1
 
-        # ── Stage 4: Email alert ──────────────────────────────────────────────
-        # Notify on new / uncertain matches. Skip AUTO_MERGED to avoid duplicate
-        # emails when the same known promotion is seen again from another source.
         if confidence != MatchConfidence.AUTO_MERGED:
-            sent = await notify_voucher_found(db_post, extracted)
-            if sent:
-                db_post.is_notified = True
-                stats["notified"] += 1
+            pending_notifications.append((db_post, extracted))
 
     # ── Finalise ──────────────────────────────────────────────────────────────
     source.last_checked_utc = datetime.now(timezone.utc)
     source.error_count = 0
     await db.commit()
+
+    # ── Stage 4: Email alert ─────────────────────────────────────────────────
+    # Notify only after posts/events are committed. If a send fails, the post
+    # remains visible in the DB with is_notified=false.
+    for db_post, extracted in pending_notifications:
+        sent = await notify_voucher_found(db_post, extracted)
+        if sent:
+            db_post.is_notified = True
+            await db.commit()
+            stats["notified"] += 1
+        else:
+            await db.rollback()
 
     return stats

@@ -6,7 +6,6 @@ pipeline for that source, updates scheduling fields, and releases the lease.
 """
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 
 import structlog
@@ -240,7 +239,12 @@ async def dispatch_tick(
         failure_source.avg_runtime_ms = source.avg_runtime_ms
 
         try:
-            async with asyncio.timeout(settings.tick_job_timeout_seconds):
+            if settings.tick_job_timeout_seconds:
+                import asyncio
+
+                async with asyncio.timeout(settings.tick_job_timeout_seconds):
+                    stats = await run_pipeline_for_source(session, source, collectors)
+            else:
                 stats = await run_pipeline_for_source(session, source, collectors)
             elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
             await _mark_success(session, source, elapsed_ms)

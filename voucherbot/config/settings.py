@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
@@ -78,20 +78,32 @@ class Settings(BaseSettings):
     scraper_min_delay_seconds: float = 2.0
 
     # DB-driven scheduler
-    tick_lease_ttl_seconds: int = 90
-    tick_job_timeout_seconds: int = 45
+    tick_lease_ttl_seconds: int = 21600
+    tick_job_timeout_seconds: Optional[int] = None
     source_backoff_base_minutes: int = 5
     source_backoff_max_minutes: int = 360
 
     # AI providers
     gemini_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
+    groq_model: str = "openai/gpt-oss-120b"
+    groq_requests_per_minute: int = 30
+    groq_tokens_per_minute: Optional[int] = None
+    groq_max_completion_tokens: int = 1024
+    groq_max_input_chars: int = 12000
 
     # Event matching (nested, not sourced from env — override in tests by
     # constructing Settings(event_matcher=EventMatcherConfig(...)))
     event_matcher: EventMatcherConfig = EventMatcherConfig()
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @field_validator("tick_job_timeout_seconds", "groq_tokens_per_minute", mode="before")
+    @classmethod
+    def empty_string_as_none(cls, value: object) -> object:
+        if value == "":
+            return None
+        return value
 
 
 settings = Settings()
