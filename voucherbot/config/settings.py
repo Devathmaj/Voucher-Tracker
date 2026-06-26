@@ -86,7 +86,6 @@ class Settings(BaseSettings):
     # AI providers
     gemini_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
-    groq_model: str = "openai/gpt-oss-120b"
     groq_requests_per_minute: int = 30
     groq_tokens_per_minute: Optional[int] = None
     groq_max_completion_tokens: int = 1024

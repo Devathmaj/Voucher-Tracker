@@ -6,9 +6,10 @@ Architecture
 The public function ``analyze_post`` accepts raw post text and returns a
 canonical ``ExtractedEvent`` (defined in ``voucherbot.services.ai.schema``).
 
-Internally, two provider adapters are used in priority order:
-  1. Groq  (primary)
-  2. Gemini (fallback)
+Internally, providers are tried in priority order:
+  1. Groq / llama-3.1-8b-instant  (primary)
+  2. Groq / openai/gpt-oss-120b   (fallback on non-429 failure)
+  3. Gemini                        (final fallback on non-429 failure)
 
 Each adapter is responsible for converting its raw provider response into an
 ``ExtractedEvent``.  The pipeline NEVER depends on which provider responded.
@@ -71,6 +72,8 @@ _SYSTEM_PROMPT = (
 # ---------------------------------------------------------------------------
 _MAX_RETRIES = 3
 _FALLBACK_WAIT_S = 65
+_GROQ_PRIMARY_MODEL = "llama-3.1-8b-instant"
+_GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b"
 _GROQ_MODEL_TPM = {
     "openai/gpt-oss-120b": 8000,
     "openai/gpt-oss-20b": 8000,
@@ -92,10 +95,10 @@ def _parse_retry_delay(error_str: str) -> float:
     return _FALLBACK_WAIT_S
 
 
-def _groq_tokens_per_minute() -> int:
+def _groq_tokens_per_minute(model: str) -> int:
     if settings.groq_tokens_per_minute:
         return settings.groq_tokens_per_minute
-    return _GROQ_MODEL_TPM.get(settings.groq_model, 6000)
+    return _GROQ_MODEL_TPM.get(model, 6000)
 
 
 def _estimate_tokens(text: str) -> int:
@@ -104,13 +107,13 @@ def _estimate_tokens(text: str) -> int:
     return prompt_tokens + settings.groq_max_completion_tokens
 
 
-async def _wait_for_groq_budget(estimated_tokens: int) -> None:
+async def _wait_for_groq_budget(estimated_tokens: int, model: str) -> None:
     rpm = max(1, settings.groq_requests_per_minute)
-    tpm = max(1, _groq_tokens_per_minute())
+    tpm = max(1, _groq_tokens_per_minute(model))
     if estimated_tokens > tpm:
         logger.warning(
             "ai.analyzer: estimated Groq request exceeds TPM budget",
-            model=settings.groq_model,
+            model=model,
             estimated_tokens=estimated_tokens,
             tpm=tpm,
         )
@@ -144,7 +147,7 @@ async def _wait_for_groq_budget(estimated_tokens: int) -> None:
             logger.info(
                 "ai.analyzer: waiting for Groq rate budget",
                 wait_seconds=round(wait_seconds, 2),
-                model=settings.groq_model,
+                model=model,
                 rpm=rpm,
                 tpm=tpm,
                 estimated_tokens=estimated_tokens,
@@ -191,8 +194,8 @@ def _parse_to_extracted_event(raw_text: str) -> ExtractedEvent | None:
 # ---------------------------------------------------------------------------
 # Provider adapters
 # ---------------------------------------------------------------------------
-async def _call_groq(title: str, content: str | None) -> ExtractedEvent | None:
-    """Groq provider adapter.  Returns None on non-retryable failure."""
+async def _call_groq_model(title: str, content: str | None, model: str) -> ExtractedEvent | None:
+    """Call a specific Groq model. Returns None on non-retryable failure, raises on 429."""
     from groq import AsyncGroq  # lazy import
 
     client = AsyncGroq(api_key=settings.groq_api_key)
@@ -214,15 +217,15 @@ async def _call_groq(title: str, content: str | None) -> ExtractedEvent | None:
 
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            await _wait_for_groq_budget(estimated_tokens)
+            await _wait_for_groq_budget(estimated_tokens, model)
             params = {
-                "model": settings.groq_model,
+                "model": model,
                 "messages": messages,
                 "temperature": 1,
                 "max_completion_tokens": settings.groq_max_completion_tokens,
                 "top_p": 1,
             }
-            if settings.groq_model.startswith("openai/gpt-oss-"):
+            if model.startswith("openai/gpt-oss-"):
                 params["reasoning_effort"] = "medium"
 
             resp = await client.chat.completions.create(**params)
@@ -230,21 +233,36 @@ async def _call_groq(title: str, content: str | None) -> ExtractedEvent | None:
             return _parse_to_extracted_event(raw_text)
         except Exception as exc:
             error_str = str(exc)
-            if "429" in error_str and attempt < _MAX_RETRIES:
-                wait = _parse_retry_delay(error_str)
-                logger.warning(
-                    "ai.analyzer: Groq rate-limited, retrying",
-                    attempt=attempt,
-                    wait_seconds=wait,
-                )
-                await asyncio.sleep(wait)
+            if "429" in error_str:
+                if attempt < _MAX_RETRIES:
+                    wait = _parse_retry_delay(error_str)
+                    logger.warning(
+                        "ai.analyzer: Groq rate-limited, retrying",
+                        model=model,
+                        attempt=attempt,
+                        wait_seconds=wait,
+                    )
+                    await asyncio.sleep(wait)
+                else:
+                    raise  # propagate 429 so caller skips to next provider
             else:
                 logger.warning(
-                    "ai.analyzer: Groq failed, will try fallback",
+                    "ai.analyzer: Groq model failed, will try next provider",
+                    model=model,
                     error=error_str[:120],
                 )
                 return None
     return None
+
+
+async def _call_groq(title: str, content: str | None) -> ExtractedEvent | None:
+    """Groq adapter: tries primary (llama-3.1-8b-instant), falls back to gpt-oss on non-429 failure."""
+    result = await _call_groq_model(title, content, _GROQ_PRIMARY_MODEL)
+    if result is not None:
+        return result
+    # Primary returned None (non-429 failure) — try fallback model
+    logger.info("ai.analyzer: Groq primary failed, trying fallback model", fallback=_GROQ_FALLBACK_MODEL)
+    return await _call_groq_model(title, content, _GROQ_FALLBACK_MODEL)
 
 
 async def _call_gemini(title: str, content: str | None) -> ExtractedEvent | None:
@@ -293,7 +311,8 @@ async def analyze_post(title: str, content: str | None) -> ExtractedEvent | None
     Returns an ``ExtractedEvent`` (is_voucher may be False for non-promo
     content), or ``None`` if no LLM provider is configured / all fail.
 
-    Provider priority: Groq → Gemini.
+    Provider priority: Groq/llama (primary) → Groq/gpt-oss (fallback) → Gemini (final fallback).
+    Fallback is triggered only on non-429 failures; 429s are retried within each provider.
     """
     if settings.groq_api_key:
         result = await _call_groq(title, content)
