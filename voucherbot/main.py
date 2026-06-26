@@ -13,19 +13,17 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_logging()
-    await logger.ainfo("Starting up VoucherBot API...", app_env=settings.app_env)
-    # Dev only: create tables + seed. Production uses a DML-only DB role, so
+    await logger.ainfo("Starting up VoucherBot API...", is_prod=settings.is_prod)
+    # Non-prod: create tables + seed. Production uses a DML-only DB role, so
     # schema/setup must be applied ahead of time (alembic + admin bootstrap).
-    if settings.app_env == "development":
+    if not settings.is_prod:
         from voucherbot.database.init_db import init_db
         from voucherbot.database.bootstrap import bootstrap_data
 
         await init_db()
         await bootstrap_data()
     else:
-        await logger.ainfo(
-            "Skipping DB init/bootstrap (non-development env)"
-        )
+        await logger.ainfo("Skipping DB init/bootstrap (IS_PROD=true)")
     start_scheduler()
     yield
     await stop_scheduler()

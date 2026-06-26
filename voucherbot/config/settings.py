@@ -49,7 +49,8 @@ SOURCE_PRIORITY: list[str] = [
 
 
 class Settings(BaseSettings):
-    app_env: str = "development"
+    # False → create tables + seed on startup; True → skip (DML-only prod role)
+    is_prod: bool = False
     log_level: str = "INFO"
     database_url: str
 

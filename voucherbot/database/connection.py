@@ -5,7 +5,7 @@ from voucherbot.config.settings import settings
 
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.app_env == "development",
+    echo=not settings.is_prod,
 )
 
 AsyncSessionLocal = async_sessionmaker(

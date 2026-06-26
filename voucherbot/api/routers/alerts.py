@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from voucherbot.database.connection import get_session
-from voucherbot.models.post import Post, PostStatus
+from voucherbot.models.post import VoucherPost
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -12,49 +11,41 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 @router.get("")
 async def get_alerts(
     limit: int = Query(default=25, ge=1, le=100),
-    min_score: int = Query(default=4, ge=0),
+    min_score: int = Query(default=0, ge=0),
+    notified: bool | None = Query(
+        default=None,
+        description="Filter by is_notified; omit for all vouchers",
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> list[dict]:
-    stmt = (
-        select(Post)
-        .options(selectinload(Post.source))
-        .where(
-            Post.status.in_(
-                [PostStatus.PROCESSED, PostStatus.NOTIFIED, PostStatus.QUEUED]
-            )
-        )
-        .where(Post.score >= min_score)
-        .order_by(Post.created_at.desc())
-        .limit(limit * 3)
-    )
-    result = await session.execute(stmt)
-    posts = result.scalars().all()
+    """Return AI-confirmed vouchers from the ``voucher_posts`` view."""
+    stmt = select(VoucherPost).where(VoucherPost.score >= min_score)
+    if notified is not None:
+        stmt = stmt.where(VoucherPost.is_notified.is_(notified))
+    stmt = stmt.order_by(VoucherPost.created_at.desc()).limit(limit)
 
-    alerts = [
-        post
-        for post in posts
-        if _is_ai_positive(post) or (post.ai_result is None and post.score >= min_score)
-    ][:limit]
+    result = await session.execute(stmt)
+    rows = result.scalars().all()
 
     return [
         {
-            "id": post.id,
-            "title": post.title,
-            "url": post.url,
-            "source_name": post.source.name if post.source else None,
-            "source_type": post.source.type.value if post.source else None,
-            "score": post.score,
-            "status": post.status.value,
-            "confidence": (post.ai_result or {}).get("confidence"),
-            "voucher_code": (post.ai_result or {}).get("voucher_code"),
-            "reason": (post.ai_result or {}).get("reason"),
-            "published_at": post.published_at,
-            "created_at": post.created_at,
+            "id": row.id,
+            "title": row.title,
+            "url": row.url,
+            "score": row.score,
+            "status": row.status.value if row.status else None,
+            "is_notified": row.is_notified,
+            "vendor": row.vendor,
+            "promotion_name": row.promotion_name,
+            "promotion_type": row.promotion_type,
+            "voucher_code": row.voucher_code,
+            "discount": row.discount,
+            "registration_url": row.registration_url,
+            "confidence": row.confidence,
+            "reason": row.reason,
+            "event_id": row.event_id,
+            "published_at": row.published_at,
+            "created_at": row.created_at,
         }
-        for post in alerts
+        for row in rows
     ]
-
-
-def _is_ai_positive(post: Post) -> bool:
-    result = post.ai_result or {}
-    return result.get("is_voucher") is True

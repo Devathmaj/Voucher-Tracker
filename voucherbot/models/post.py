@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 from typing import Any, Optional
-from sqlalchemy import String, Integer, Boolean, DateTime, Enum, ForeignKey, Text, UniqueConstraint, func
+from sqlalchemy import String, Integer, Boolean, DateTime, Enum, ForeignKey, Text, UniqueConstraint, Float, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -15,6 +15,7 @@ class PostStatus(enum.Enum):
     QUEUED = "QUEUED"
     PROCESSING = "PROCESSING"
     PROCESSED = "PROCESSED"
+    # Kept for DB enum compatibility; app uses ``is_notified`` instead.
     NOTIFIED = "NOTIFIED"
     FAILED = "FAILED"
 
@@ -38,6 +39,8 @@ class Post(Base):
     score: Mapped[int] = mapped_column(Integer, default=0)
     raw_data: Mapped[Optional[Any]] = mapped_column(JSONB)
     ai_result: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
+    # True after a voucher alert email was successfully sent (status stays PROCESSED).
+    is_notified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     # --- Deduplication ---
     # SHA-1 of normalised(title) + normalised(url).  Nullable so existing rows
     # remain valid; the unique partial index (WHERE content_hash IS NOT NULL)
@@ -55,3 +58,39 @@ class Post(Base):
 
     source = relationship("Source", back_populates="posts")
     event = relationship("Event", back_populates="posts")
+
+
+class VoucherPost(Base):
+    """Read-only mapping of the ``voucher_posts`` view (AI-confirmed vouchers)."""
+
+    __tablename__ = "voucher_posts"
+    __table_args__ = {"info": {"is_view": True}}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[int] = mapped_column(Integer)
+    external_id: Mapped[str] = mapped_column(String)
+    url: Mapped[str] = mapped_column(String)
+    title: Mapped[str] = mapped_column(String)
+    content: Mapped[Optional[str]] = mapped_column(Text)
+    summary: Mapped[Optional[str]] = mapped_column(Text)
+    author: Mapped[Optional[str]] = mapped_column(String)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    status: Mapped[PostStatus] = mapped_column(
+        Enum(PostStatus, create_constraint=False, native_enum=True),
+    )
+    score: Mapped[int] = mapped_column(Integer)
+    raw_data: Mapped[Optional[Any]] = mapped_column(JSONB)
+    ai_result: Mapped[Optional[Any]] = mapped_column(JSONB)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(40))
+    event_id: Mapped[Optional[int]] = mapped_column(Integer)
+    is_notified: Mapped[bool] = mapped_column(Boolean)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    vendor: Mapped[Optional[str]] = mapped_column(String)
+    promotion_name: Mapped[Optional[str]] = mapped_column(String)
+    promotion_type: Mapped[Optional[str]] = mapped_column(String)
+    voucher_code: Mapped[Optional[str]] = mapped_column(String)
+    discount: Mapped[Optional[str]] = mapped_column(String)
+    registration_url: Mapped[Optional[str]] = mapped_column(String)
+    reason: Mapped[Optional[str]] = mapped_column(String)
+    confidence: Mapped[Optional[float]] = mapped_column(Float)

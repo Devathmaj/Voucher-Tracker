@@ -18,7 +18,7 @@ Stage 3 — Canonical Event Matching
 
 Stage 4 — Email notification
     On is_voucher for NEW / POSSIBLE_MATCH posts, email settings.email_id via Resend
-    and mark the post NOTIFIED. AUTO_MERGED skips email to avoid duplicate alerts.
+    and set ``is_notified=true``. Status stays PROCESSED. AUTO_MERGED skips email.
 
 All providers produce NormalizedPost objects. Everything after collection
 is provider-agnostic and reused across Reddit, RSS, and Website sources.
@@ -287,6 +287,7 @@ async def _process_one_source(
                 score=score,
                 raw_data=post.raw_data,
                 content_hash=ch,
+                is_notified=False,
             )
             .on_conflict_do_nothing(constraint="uq_posts_source_external")
         )
@@ -358,7 +359,7 @@ async def _process_one_source(
         if confidence != MatchConfidence.AUTO_MERGED:
             sent = await notify_voucher_found(db_post, extracted)
             if sent:
-                db_post.status = PostStatus.NOTIFIED
+                db_post.is_notified = True
                 stats["notified"] += 1
 
     # ── Finalise ──────────────────────────────────────────────────────────────

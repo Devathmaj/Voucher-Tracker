@@ -1,7 +1,6 @@
 """
 HTTP scraping policy: identifying User-Agent, robots.txt, and per-host delays.
 
-Guidance comes from ``deep-research-report (1).md``:
 prefer RSS/APIs, obey robots.txt / Crawl-delay, identify the bot, and stay
 at or below ~0.5 req/s per host when no crawl-delay is published.
 """
