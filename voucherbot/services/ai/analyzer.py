@@ -86,6 +86,8 @@ _GROQ_MODEL_TPM = {
 _groq_rate_lock = asyncio.Lock()
 _groq_request_times: deque[float] = deque()
 _groq_token_times: deque[tuple[float, int]] = deque()
+_groq_token_reservations: dict[int, tuple[float, int]] = {}  # id → (timestamp, reserved)
+_groq_reservation_counter: int = 0
 
 
 def _parse_retry_delay(error_str: str) -> float:
@@ -102,22 +104,16 @@ def _groq_tokens_per_minute(model: str) -> int:
 
 
 def _estimate_tokens(text: str) -> int:
-    # Conservative approximation: most English/API text is ~3-4 chars/token.
-    prompt_tokens = max(1, (len(text) + 2) // 3)
-    return prompt_tokens + settings.groq_max_completion_tokens
+    # ~4 chars/token is realistic for English; cap completion buffer at 512.
+    return max(1, len(text) // 4) + min(settings.groq_max_completion_tokens, 512)
 
 
-async def _wait_for_groq_budget(estimated_tokens: int, model: str) -> None:
+async def _wait_for_groq_budget(estimated_tokens: int, model: str) -> int:
+    """Reserve budget; returns a reservation ID to settle with actual tokens after the call."""
+    global _groq_reservation_counter
     rpm = max(1, settings.groq_requests_per_minute)
     tpm = max(1, _groq_tokens_per_minute(model))
-    if estimated_tokens > tpm:
-        logger.warning(
-            "ai.analyzer: estimated Groq request exceeds TPM budget",
-            model=model,
-            estimated_tokens=estimated_tokens,
-            tpm=tpm,
-        )
-        estimated_tokens = tpm
+    estimated_tokens = min(estimated_tokens, tpm)
 
     async with _groq_rate_lock:
         while True:
@@ -127,15 +123,22 @@ async def _wait_for_groq_budget(estimated_tokens: int, model: str) -> None:
                 _groq_request_times.popleft()
             while _groq_token_times and _groq_token_times[0][0] <= cutoff:
                 _groq_token_times.popleft()
+            # Expire stale reservations (e.g. calls that raised before settling)
+            stale = [rid for rid, (ts, _) in _groq_token_reservations.items() if now - ts > 120]
+            for rid in stale:
+                _groq_token_reservations.pop(rid, None)
 
-            used_tokens = sum(tokens for _, tokens in _groq_token_times)
+            reserved = sum(t for _, t in _groq_token_reservations.values())
+            used_tokens = sum(tokens for _, tokens in _groq_token_times) + reserved
             has_request_budget = len(_groq_request_times) < rpm
             has_token_budget = used_tokens + estimated_tokens <= tpm
 
             if has_request_budget and has_token_budget:
                 _groq_request_times.append(now)
-                _groq_token_times.append((now, estimated_tokens))
-                return
+                _groq_reservation_counter += 1
+                rid = _groq_reservation_counter
+                _groq_token_reservations[rid] = (now, estimated_tokens)
+                return rid
 
             wait_until = now + 1
             if not has_request_budget and _groq_request_times:
@@ -154,6 +157,14 @@ async def _wait_for_groq_budget(estimated_tokens: int, model: str) -> None:
                 used_tokens=used_tokens,
             )
             await asyncio.sleep(wait_seconds)
+
+
+async def _settle_groq_budget(reservation_id: int, actual_tokens: int) -> None:
+    """Replace the pre-flight reservation with the actual token count from the API response."""
+    async with _groq_rate_lock:
+        entry = _groq_token_reservations.pop(reservation_id, None)
+        if entry is not None:
+            _groq_token_times.append((entry[0], actual_tokens))
 
 
 # ---------------------------------------------------------------------------
@@ -216,8 +227,8 @@ async def _call_groq_model(title: str, content: str | None, model: str) -> Extra
     estimated_tokens = _estimate_tokens(_SYSTEM_PROMPT + user_prompt)
 
     for attempt in range(1, _MAX_RETRIES + 1):
+        rid = await _wait_for_groq_budget(estimated_tokens, model)
         try:
-            await _wait_for_groq_budget(estimated_tokens, model)
             params = {
                 "model": model,
                 "messages": messages,
@@ -229,11 +240,16 @@ async def _call_groq_model(title: str, content: str | None, model: str) -> Extra
                 params["reasoning_effort"] = "medium"
 
             resp = await client.chat.completions.create(**params)
+            actual = getattr(resp.usage, "total_tokens", None) or estimated_tokens
+            await _settle_groq_budget(rid, actual)
             raw_text: str = resp.choices[0].message.content.strip()
             return _parse_to_extracted_event(raw_text)
         except Exception as exc:
             error_str = str(exc)
             if "429" in error_str:
+                # Discard reservation — Groq didn't consume tokens
+                async with _groq_rate_lock:
+                    _groq_token_reservations.pop(rid, None)
                 if attempt < _MAX_RETRIES:
                     wait = _parse_retry_delay(error_str)
                     logger.warning(
