@@ -161,6 +161,7 @@ def _page(
     article_selector: str = "article, main li, .card, .event-card",
     title_selector: str = "h1, h2, h3, a",
     link_selector: str = "a",
+    note_selector: str | None = None,
     priority_tier: str = "D",
     cadence_minutes: int | None = None,
     priority: int = 1,
@@ -180,6 +181,8 @@ def _page(
         "query_terms": query_terms or DEFAULT_QUERY_TERMS,
         "poll_interval_minutes": interval,
     }
+    if note_selector:
+        config["note_selector"] = note_selector
     if note:
         config["note"] = note
     if unsupported:
@@ -469,6 +472,7 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         link_selector="a",
         priority_tier="C",
         priority=2,
+        note_selector="aside.starlight-aside--note .starlight-aside__content",
     ),
     _page(
         "VladTalksTech",

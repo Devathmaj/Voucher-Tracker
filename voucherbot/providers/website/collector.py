@@ -36,6 +36,7 @@ class WebsiteCollector(BaseCollector):
         article_selector = source_config.get("article_selector", "article")
         title_selector = source_config.get("title_selector", "h2")
         link_selector = source_config.get("link_selector", "a")
+        note_selector = source_config.get("note_selector")
 
         if not url:
             logger.warning("WebsiteCollector: no url in config", config=source_config)
@@ -80,11 +81,19 @@ class WebsiteCollector(BaseCollector):
 
             external_id = hashlib.sha1(f"{url}:{href}:{title}".encode()).hexdigest()
 
+            raw_content = article.get_text(separator=" ", strip=True) or None
+            if note_selector:
+                note_el = article.select_one(note_selector)
+                note_text = note_el.get_text(separator=" ", strip=True) if note_el else None
+                content = f"Note: {note_text}\n{raw_content}" if note_text else raw_content
+            else:
+                content = raw_content
+
             results.append(NormalizedPost(
                 external_id=external_id,
                 url=href or url,
                 title=title or href,
-                content=article.get_text(separator=" ", strip=True) or None,
+                content=content,
                 summary=None,
                 author=None,
                 published_at=None,
