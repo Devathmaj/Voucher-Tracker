@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any
+import asyncio
 import hashlib
 import structlog
 from bs4 import BeautifulSoup
@@ -57,7 +58,7 @@ class WebsiteCollector(BaseCollector):
             logger.error("WebsiteCollector: HTTP error", url=url, error=str(e))
             return []
 
-        soup = BeautifulSoup(response.text, "lxml")
+        soup = await asyncio.to_thread(BeautifulSoup, response.text, "lxml")
         articles = soup.select(article_selector)[:limit]
         if not articles:
             articles = [soup]

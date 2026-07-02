@@ -72,6 +72,13 @@ def _clean_html(value: Any) -> str | None:
     return BeautifulSoup(value, "lxml").get_text(separator=" ", strip=True) or None
 
 
+async def _clean_html_async(value: Any) -> str | None:
+    if not value or not isinstance(value, str):
+        return None
+    import asyncio
+    return await asyncio.to_thread(_clean_html, value)
+
+
 def _parse_date(entry) -> datetime | None:
     """Parse a date from an RSS entry, trying multiple fields."""
     for attr in ("published_parsed", "updated_parsed"):
@@ -164,7 +171,8 @@ class RssCollector(BaseCollector):
             )
             return json_results
 
-        feed = feedparser.parse(content)
+        import asyncio
+        feed = await asyncio.to_thread(feedparser.parse, content)
 
         if feed.bozo and not feed.entries:
             logger.warning(
@@ -172,12 +180,15 @@ class RssCollector(BaseCollector):
                 feed_url=feed_url,
             )
             try:
-                parser = etree.XMLParser(recover=True)
-                root = etree.fromstring(content, parser)
-                if root is None:
-                    raise ValueError("XML parser returned no root element")
-                repaired_xml = etree.tostring(root, encoding="unicode")
-                feed = feedparser.parse(repaired_xml)
+                def _recover() -> str:
+                    parser = etree.XMLParser(recover=True)
+                    root = etree.fromstring(content, parser)
+                    if root is None:
+                        raise ValueError("XML parser returned no root element")
+                    return etree.tostring(root, encoding="unicode")
+
+                repaired_xml = await asyncio.to_thread(_recover)
+                feed = await asyncio.to_thread(feedparser.parse, repaired_xml)
             except Exception as e:
                 logger.error(
                     "RssCollector: recovery failed", feed_url=feed_url, error=str(e)
@@ -196,7 +207,7 @@ class RssCollector(BaseCollector):
         for entry in feed.entries[:limit]:
             url = entry.get("link", "")
             external_id = entry.get("id") or hashlib.sha1(url.encode()).hexdigest()
-            content_text = _clean_html(entry.get("summary") or entry.get("description"))
+            content_text = await _clean_html_async(entry.get("summary") or entry.get("description"))
 
             results.append(
                 NormalizedPost(
@@ -244,6 +255,8 @@ class RssCollector(BaseCollector):
             external_id = str(
                 item.get("id") or item.get("guid") or hashlib.sha1(url.encode()).hexdigest()
             )
+            # _clean_html is synchronous but cheap for JSON feed snippets;
+            # full async offload happens in the RSS path via _clean_html_async.
             summary = _clean_html(item.get("summary"))
             content_text = _clean_html(
                 item.get("summary") or item.get("description") or item.get("body")

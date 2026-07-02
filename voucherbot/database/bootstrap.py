@@ -48,7 +48,6 @@ KEYWORDS = [
     {"keyword": "limited time", "score": 3},
     {"keyword": "beta access", "score": 3},
     {"keyword": "free tier", "score": 3},
-    {"keyword": "cloud skills challenge", "score": 3},
     {"keyword": "register now", "score": 1},
     {"keyword": "webinar", "score": 1},
     {"keyword": "virtual event", "score": 1},

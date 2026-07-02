@@ -30,7 +30,21 @@ _TIER_DEFAULT_MINUTES = {
 }
 
 
-def compute_backoff_minutes(consecutive_failures: int) -> int:
+# HTTP status codes / error patterns that indicate a permanently broken source.
+# These skip backoff and disable the source immediately.
+_UNRECOVERABLE_HTTP = {400, 401, 403, 404, 410, 451}
+_UNRECOVERABLE_PATTERNS = (
+    "404", "403", "401", "410", "not found", "forbidden",
+    "unauthorized", "gone", "no longer available", "does not exist",
+)
+
+
+def _is_unrecoverable(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return any(p in msg for p in _UNRECOVERABLE_PATTERNS)
+
+
+
     """Exponential backoff capped at source_backoff_max_minutes."""
     if consecutive_failures <= 0:
         return 0
@@ -210,6 +224,31 @@ async def _mark_failure(
     await session.commit()
 
 
+async def _mark_unrecoverable(
+    session: AsyncSession,
+    source: Source,
+    error: str,
+) -> None:
+    """Disable a source permanently after an unrecoverable error."""
+    logger.warning(
+        "dispatcher: disabling source — unrecoverable error",
+        source=source.name,
+        error=error[:120],
+    )
+    await session.execute(
+        text(
+            """
+            UPDATE sources
+            SET enabled = false,
+                error_count = error_count + 1
+            WHERE id = :source_id
+            """
+        ),
+        {"source_id": source.id},
+    )
+    await session.commit()
+
+
 async def dispatch_tick(
     session: AsyncSession,
     collectors: dict[str, BaseCollector],
@@ -258,6 +297,9 @@ async def dispatch_tick(
         except Exception as exc:
             elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
             await session.rollback()
+            if _is_unrecoverable(exc):
+                await _mark_unrecoverable(session, source, str(exc))
+                return {"status": "skipped", "source": source_name, "reason": str(exc)[:120]}
             await _mark_failure(session, failure_source, elapsed_ms)
             logger.error(
                 "dispatcher: tick failed",

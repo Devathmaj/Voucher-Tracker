@@ -39,7 +39,7 @@ from voucherbot.models.keyword import Keyword
 from voucherbot.models.post import Post, PostStatus
 from voucherbot.models.source import Source, SourceType
 from voucherbot.providers.base import BaseCollector, NormalizedPost
-from voucherbot.services.ai.analyzer import analyze_post
+from voucherbot.services.ai.analyzer import analyze_post, analyze_post_batch
 from voucherbot.services.email.notifications import notify_voucher_found
 from voucherbot.services.ingestion.dedup import content_hash, deduplicate_batch
 from voucherbot.services.ingestion.event_matcher import EventMatcher
@@ -73,7 +73,7 @@ def _fetch_limit_for_source(source: Source, fetch_limit: int | None = None) -> i
         return fetch_limit
     if source.type == SourceType.REDDIT:
         return settings.reddit_fetch_limit
-    return 25
+    return 10  # conservative default for low-memory environments
 
 
 async def run_pipeline_for_source(
@@ -239,6 +239,13 @@ async def _process_one_source(
         else:
             scored.append((post, score))
 
+    logger.info(
+        "pipeline: keyword filter",
+        source=source.name,
+        fetched=len(posts),
+        passed=len(scored),
+        filtered=stats["keyword_filtered"],
+    )
     if not scored:
         source.last_checked_utc = datetime.now(timezone.utc)
         source.error_count = 0
@@ -319,42 +326,49 @@ async def _process_one_source(
             inserted_posts.append((post, db_post))
 
     # ── Stage 2: AI Extraction ────────────────────────────────────────────────
-    # Only runs on posts that survived Stage 1.
+    # Only send title + a short snippet to AI — full content is for DB storage.
+    # 500 chars is enough to detect voucher intent without burning TPM on
+    # podcast transcripts or long blog summaries.
+    _AI_CONTENT_LIMIT = 500
     pending_notifications = []
-    for post, db_post in inserted_posts:
-        extracted = await analyze_post(title=post.title, content=post.content)
-        if extracted is None:
-            # Provider unavailable; leave post status as QUEUED for retry.
-            continue
+    if inserted_posts:
+        batch_inputs = [
+            (post.title, (post.content or "")[:_AI_CONTENT_LIMIT] or None)
+            for post, _ in inserted_posts
+        ]
+        batch_results = await analyze_post_batch(batch_inputs)
 
-        # Persist the raw AI result for debugging / audit.
-        db_post.ai_result = extracted.model_dump()
-        stats["ai_analyzed"] += 1
+        for (post, db_post), extracted in zip(inserted_posts, batch_results):
+            if extracted is None:
+                continue
 
-        if not extracted.is_voucher:
-            db_post.status = PostStatus.FILTERED
-            logger.debug(
-                "pipeline: AI classified as non-voucher",
-                post_id=db_post.id,
-                confidence=extracted.confidence,
+            db_post.ai_result = extracted.model_dump()
+            stats["ai_analyzed"] += 1
+
+            if not extracted.is_voucher:
+                db_post.status = PostStatus.FILTERED
+                logger.debug(
+                    "pipeline: AI classified as non-voucher",
+                    post_id=db_post.id,
+                    confidence=extracted.confidence,
+                )
+                continue
+
+            # ── Stage 3: Canonical Event Matching ─────────────────────────────────
+            _event, confidence = await _event_matcher.match_or_create(
+                db, extracted, db_post, source.type
             )
-            continue
+            db_post.status = PostStatus.PROCESSED
 
-        # ── Stage 3: Canonical Event Matching ─────────────────────────────────
-        _event, confidence = await _event_matcher.match_or_create(
-            db, extracted, db_post, source.type
-        )
-        db_post.status = PostStatus.PROCESSED
+            if confidence == MatchConfidence.NEW:
+                stats["events_created"] += 1
+            elif confidence == MatchConfidence.POSSIBLE_MATCH:
+                stats["possible_matches"] += 1
+            else:
+                stats["events_attached"] += 1
 
-        if confidence == MatchConfidence.NEW:
-            stats["events_created"] += 1
-        elif confidence == MatchConfidence.POSSIBLE_MATCH:
-            stats["possible_matches"] += 1
-        else:
-            stats["events_attached"] += 1
-
-        if confidence != MatchConfidence.AUTO_MERGED:
-            pending_notifications.append((db_post, extracted))
+            if confidence != MatchConfidence.AUTO_MERGED:
+                pending_notifications.append((db_post, extracted))
 
     # ── Finalise ──────────────────────────────────────────────────────────────
     source.last_checked_utc = datetime.now(timezone.utc)

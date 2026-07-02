@@ -1,19 +1,17 @@
-"""Background scheduler: DB-driven single heartbeat.
+"""Background scheduler: continuous self-rescheduling loop.
 
-A single APScheduler job calls the dispatcher in-process. Postgres owns queue
-ordering, source lease state, and cross-process concurrency through
-``pipeline_lock``.
+Each tick runs immediately after the previous one finishes — no fixed interval.
+The DB lease (pipeline_lock) ensures only one tick runs at a time across
+processes. Between ticks a short idle sleep prevents busy-looping when all
+sources are up to date.
 """
 from __future__ import annotations
 
 import asyncio
 import uuid
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
 import structlog
 
-from voucherbot.config.settings import settings
 from voucherbot.database.connection import AsyncSessionLocal
 from voucherbot.providers.reddit.client import RedditClient
 from voucherbot.providers.reddit.collector import RedditCollector
@@ -23,59 +21,52 @@ from voucherbot.services.dispatcher import dispatch_tick
 
 logger = structlog.get_logger(__name__)
 
-scheduler = AsyncIOScheduler()
 _reddit_client = RedditClient()
-_active_ticks: set[asyncio.Task] = set()
-
 _collectors = {
     "reddit": RedditCollector(_reddit_client),
     "rss": RssCollector(),
     "web": WebsiteCollector(),
 }
 
+_loop_task: asyncio.Task | None = None
 
-async def tick() -> None:
-    """Dispatch one due source and track it for graceful shutdown."""
-    task = asyncio.current_task()
-    if task is not None:
-        _active_ticks.add(task)
+# Seconds to wait before next tick when all sources are idle or busy.
+_IDLE_SLEEP = 30
+_BUSY_SLEEP = 5
 
-    holder_id = str(uuid.uuid4())[:8]
-    try:
-        async with AsyncSessionLocal() as session:
-            result = await dispatch_tick(session, _collectors, holder_id)
-        logger.info("scheduler: tick complete", **result)
-    finally:
-        if task is not None:
-            _active_ticks.discard(task)
+
+async def _run_loop() -> None:
+    logger.info("scheduler: loop started")
+    while True:
+        holder_id = str(uuid.uuid4())[:8]
+        try:
+            async with AsyncSessionLocal() as session:
+                result = await dispatch_tick(session, _collectors, holder_id)
+            status = result.get("status")
+            logger.info("scheduler: tick complete", **result)
+            if status in ("idle", "busy"):
+                # No work done — wait before checking again to avoid hammering DB.
+                sleep = _IDLE_SLEEP if status == "idle" else _BUSY_SLEEP
+                await asyncio.sleep(sleep)
+            # status == "ran" or "failed": proceed immediately to next source.
+        except asyncio.CancelledError:
+            logger.info("scheduler: loop cancelled")
+            return
+        except Exception as exc:
+            logger.error("scheduler: unexpected loop error", error=str(exc))
+            await asyncio.sleep(_IDLE_SLEEP)
 
 
 def start_scheduler() -> None:
-    """Register the heartbeat job and start APScheduler."""
-    logger.info(
-        "scheduler: starting - DB-driven mode",
-        reddit_ingestion_enabled=settings.reddit_ingestion_enabled,
-    )
-
-    scheduler.add_job(
-        tick,
-        IntervalTrigger(minutes=2, jitter=30),
-        id="heartbeat_tick",
-        max_instances=1,
-        misfire_grace_time=120,
-        coalesce=True,
-        replace_existing=True,
-    )
-
-    scheduler.start()
-    logger.info("scheduler: heartbeat registered")
+    global _loop_task
+    logger.info("scheduler: starting loop")
+    _loop_task = asyncio.ensure_future(_run_loop())
 
 
 async def stop_scheduler() -> None:
-    """Stop scheduling new work, then wait for any running tick."""
+    global _loop_task
     logger.info("scheduler: shutting down")
-    scheduler.shutdown(wait=False)
-    if _active_ticks:
-        logger.info("scheduler: waiting for active ticks", count=len(_active_ticks))
-        await asyncio.gather(*list(_active_ticks), return_exceptions=True)
+    if _loop_task and not _loop_task.done():
+        _loop_task.cancel()
+        await asyncio.gather(_loop_task, return_exceptions=True)
     await _reddit_client.close()
