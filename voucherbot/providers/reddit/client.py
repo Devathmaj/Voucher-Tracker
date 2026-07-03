@@ -17,10 +17,10 @@ class RedditClient:
             and settings.reddit_user_agent
         )
         self.reddit = asyncpraw.Reddit(
-            client_id=settings.reddit_client_id,
-            client_secret=settings.reddit_client_secret,
-            user_agent=settings.reddit_user_agent,
-        )
+            client_id=settings.reddit_client_id or "placeholder",
+            client_secret=settings.reddit_client_secret or "placeholder",
+            user_agent=settings.reddit_user_agent or "placeholder",
+        ) if self.is_configured else None
         self.subreddit_cache: dict[str, Subreddit] = {}
         
     async def get_subreddit(self, name: str) -> Subreddit:
@@ -77,4 +77,5 @@ class RedditClient:
 
     async def close(self) -> None:
         """Close the underlying HTTP session."""
-        await self.reddit.close()
+        if self.reddit:
+            await self.reddit.close()

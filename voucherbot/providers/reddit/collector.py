@@ -3,6 +3,8 @@ from typing import Any
 import hashlib
 from urllib.parse import quote_plus
 
+import asyncio
+
 import feedparser
 import structlog
 
@@ -114,7 +116,7 @@ class RedditCollector(BaseCollector):
             )
             return []
 
-        feed = feedparser.parse(response.content)
+        feed = await asyncio.to_thread(feedparser.parse, response.content)
         results: list[NormalizedPost] = []
         for entry in feed.entries[:limit]:
             link = entry.get("link", "")
