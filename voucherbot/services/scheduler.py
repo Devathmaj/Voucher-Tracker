@@ -1,18 +1,21 @@
-"""Background scheduler: continuous self-rescheduling loop.
+"""Background scheduler: sweep all due sources, then sleep until the next one is due.
 
-Each tick runs immediately after the previous one finishes — no fixed interval.
-The DB lease (pipeline_lock) ensures only one tick runs at a time across
-processes. Between ticks a short idle sleep prevents busy-looping when all
-sources are up to date.
+Each sweep runs every source that is currently due, one at a time (sequential,
+not concurrent — keeps CPU flat under 0.1 vCPU). After the sweep the loop
+sleeps until the earliest next_due_at across all enabled sources, capped at
+MAX_SLEEP_SECONDS so the process stays responsive to newly-added sources.
 """
 from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import datetime, timezone
 
 import structlog
+from sqlalchemy import or_, select
 
 from voucherbot.database.connection import AsyncSessionLocal
+from voucherbot.models.source import Source
 from voucherbot.providers.reddit.client import RedditClient
 from voucherbot.providers.reddit.collector import RedditCollector
 from voucherbot.providers.rss.collector import RssCollector
@@ -30,31 +33,109 @@ _collectors = {
 
 _loop_task: asyncio.Task | None = None
 
-# Seconds to wait before next tick when all sources are idle or busy.
-_IDLE_SLEEP = 30
-_BUSY_SLEEP = 5
+# Hard ceiling on how long we sleep between sweeps (6 hours).
+# Prevents the loop from sleeping forever if all sources have distant due times.
+MAX_SLEEP_SECONDS = 6 * 3600
+
+
+async def _seconds_until_next_due() -> float:
+    """Return seconds until the earliest next_due_at among sources that are
+    actually eligible to run — same filters as _pick_due_source.
+
+    Returns MAX_SLEEP_SECONDS when no eligible source has a future due time,
+    so the loop never busy-spins on an empty or all-disabled source list.
+    """
+    from voucherbot.config.settings import settings
+    from voucherbot.models.source import SourceType
+
+    now = datetime.now(timezone.utc)
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            select(Source.next_due_at)
+            .where(
+                Source.enabled.is_(True),
+                or_(Source.backoff_until.is_(None), Source.backoff_until <= now),
+            )
+            .order_by(Source.next_due_at.asc().nulls_last())
+            .limit(1)
+        )
+        if not settings.reddit_ingestion_enabled:
+            stmt = stmt.where(Source.type != SourceType.REDDIT)
+        result = await session.execute(stmt)
+        next_due = result.scalar_one_or_none()
+
+    if next_due is None:
+        return MAX_SLEEP_SECONDS
+
+    if next_due.tzinfo is None:
+        next_due = next_due.replace(tzinfo=timezone.utc)
+
+    remaining = (next_due - now).total_seconds()
+    # If remaining <= 0 a source is already overdue; start the next sweep
+    # immediately but yield the event loop first to avoid a tight spin.
+    if remaining <= 0:
+        return 1.0
+    return min(remaining, MAX_SLEEP_SECONDS)
+
+
+async def _run_sweep() -> int:
+    """Run one full sweep: process every due source sequentially.
+
+    Returns the number of sources that were actually run.
+    """
+    ran = 0
+    busy_waited = 0
+    # Cap how long we'll wait for another instance to release the lease.
+    # tick_lease_ttl_seconds is 21600 (6 h) by default; 120 retries × 5 s = 10 min
+    # is enough to cover any normal source run without spinning forever on a
+    # crashed/stuck holder.
+    _MAX_BUSY_RETRIES = 120
+    while True:
+        holder_id = str(uuid.uuid4())[:8]
+        async with AsyncSessionLocal() as session:
+            result = await dispatch_tick(session, _collectors, holder_id)
+        status = result.get("status")
+        if status == "ran":
+            ran += 1
+            busy_waited = 0
+            logger.info("scheduler: source processed", **result)
+        elif status in ("failed", "skipped"):
+            ran += 1
+            busy_waited = 0
+            logger.warning("scheduler: source error", **result)
+        elif status == "busy":
+            busy_waited += 1
+            if busy_waited >= _MAX_BUSY_RETRIES:
+                logger.error(
+                    "scheduler: lease held too long, abandoning sweep",
+                    retries=busy_waited,
+                )
+                break
+            await asyncio.sleep(5)
+        else:
+            # "idle" — no more due sources; sweep is complete.
+            break
+    return ran
 
 
 async def _run_loop() -> None:
     logger.info("scheduler: loop started")
     while True:
-        holder_id = str(uuid.uuid4())[:8]
         try:
-            async with AsyncSessionLocal() as session:
-                result = await dispatch_tick(session, _collectors, holder_id)
-            status = result.get("status")
-            logger.info("scheduler: tick complete", **result)
-            if status in ("idle", "busy"):
-                # No work done — wait before checking again to avoid hammering DB.
-                sleep = _IDLE_SLEEP if status == "idle" else _BUSY_SLEEP
-                await asyncio.sleep(sleep)
-            # status == "ran" or "failed": proceed immediately to next source.
+            ran = await _run_sweep()
+            logger.info("scheduler: sweep complete", sources_ran=ran)
+            sleep_seconds = await _seconds_until_next_due()
+            logger.info(
+                "scheduler: sleeping until next sweep",
+                sleep_seconds=round(sleep_seconds),
+            )
+            await asyncio.sleep(sleep_seconds)
         except asyncio.CancelledError:
             logger.info("scheduler: loop cancelled")
             return
         except Exception as exc:
             logger.error("scheduler: unexpected loop error", error=str(exc))
-            await asyncio.sleep(_IDLE_SLEEP)
+            await asyncio.sleep(60)
 
 
 def start_scheduler() -> None:

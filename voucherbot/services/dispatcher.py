@@ -44,7 +44,7 @@ def _is_unrecoverable(exc: Exception) -> bool:
     return any(p in msg for p in _UNRECOVERABLE_PATTERNS)
 
 
-
+def compute_backoff_minutes(consecutive_failures: int) -> int:
     """Exponential backoff capped at source_backoff_max_minutes."""
     if consecutive_failures <= 0:
         return 0
