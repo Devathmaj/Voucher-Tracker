@@ -50,6 +50,9 @@ logger = structlog.get_logger(__name__)
 # Minimum cumulative keyword score to be queued for AI analysis.
 SCORE_THRESHOLD = 1
 
+# Max content chars sent to AI for non-Note sources.
+_AI_CONTENT_LIMIT = 500
+
 # Module-level EventMatcher instance (stateless, safe to share).
 _event_matcher = EventMatcher()
 
@@ -73,6 +76,9 @@ def _fetch_limit_for_source(source: Source, fetch_limit: int | None = None) -> i
         return fetch_limit
     if source.type == SourceType.REDDIT:
         return settings.reddit_fetch_limit
+    config = source.config or {}
+    if config.get("note_selector"):
+        return 50  # curated voucher pages — fetch all items
     return 10  # conservative default for low-memory environments
 
 
@@ -203,6 +209,16 @@ def _source_due(source: Source) -> bool:
     return elapsed_minutes >= interval_minutes
 
 
+def _ai_content(content: str | None) -> str | None:
+    """Return only the Note line if present, otherwise a short content snippet."""
+    if not content:
+        return None
+    first_line = content.split("\n", 1)[0].strip()
+    if first_line.startswith("Note:"):
+        return first_line
+    return content[:_AI_CONTENT_LIMIT] or None
+
+
 async def _process_one_source(
     db: AsyncSession,
     source: Source,
@@ -230,8 +246,14 @@ async def _process_one_source(
     stats["fetched"] = len(posts)
 
     # ── Keyword Filtering ─────────────────────────────────────────────────────
+    # Sources with note_selector are curated voucher pages — every item is
+    # intentional signal, so skip keyword filtering entirely.
+    skip_keyword_filter = bool((source.config or {}).get("note_selector"))
     scored: list[tuple[NormalizedPost, int]] = []
     for post in posts:
+        if skip_keyword_filter:
+            scored.append((post, SCORE_THRESHOLD))
+            continue
         text = f"{post.title} {post.content or ''}".lower()
         score = sum(kw.score for kw in keywords if kw.keyword.lower() in text)
         if score < SCORE_THRESHOLD:
@@ -326,14 +348,10 @@ async def _process_one_source(
             inserted_posts.append((post, db_post))
 
     # ── Stage 2: AI Extraction ────────────────────────────────────────────────
-    # Only send title + a short snippet to AI — full content is for DB storage.
-    # 500 chars is enough to detect voucher intent without burning TPM on
-    # podcast transcripts or long blog summaries.
-    _AI_CONTENT_LIMIT = 500
     pending_notifications = []
     if inserted_posts:
         batch_inputs = [
-            (post.title, (post.content or "")[:_AI_CONTENT_LIMIT] or None)
+            (post.title, _ai_content(post.content))
             for post, _ in inserted_posts
         ]
         batch_results = await analyze_post_batch(batch_inputs)
