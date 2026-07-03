@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
+import asyncio
 import json
 import re
 import structlog
@@ -75,7 +76,6 @@ def _clean_html(value: Any) -> str | None:
 async def _clean_html_async(value: Any) -> str | None:
     if not value or not isinstance(value, str):
         return None
-    import asyncio
     return await asyncio.to_thread(_clean_html, value)
 
 
@@ -135,11 +135,8 @@ class RssCollector(BaseCollector):
                 feed_url=feed_url,
                 error=str(e)[:160],
             )
-            import asyncio
-
             def _fetch() -> bytes:
                 import urllib.request
-
                 req = urllib.request.Request(
                     feed_url, headers=default_headers(accept=_FEED_ACCEPT)
                 )
@@ -171,7 +168,6 @@ class RssCollector(BaseCollector):
             )
             return json_results
 
-        import asyncio
         feed = await asyncio.to_thread(feedparser.parse, content)
 
         if feed.bozo and not feed.entries:
@@ -207,7 +203,20 @@ class RssCollector(BaseCollector):
         for entry in feed.entries[:limit]:
             url = entry.get("link", "")
             external_id = entry.get("id") or hashlib.sha1(url.encode()).hexdigest()
-            content_text = await _clean_html_async(entry.get("summary") or entry.get("description"))
+            raw_summary = entry.get("summary") or entry.get("description")
+            content_text = await _clean_html_async(raw_summary)
+
+            # If the feed provides no summary, fetch the article page and
+            # extract its text so the keyword filter has something to work with.
+            if not content_text and url:
+                try:
+                    article_resp = await polite_get(url, timeout=10.0)
+                    article_text = await asyncio.to_thread(
+                        lambda r=article_resp: BeautifulSoup(r.text, "lxml").get_text(separator=" ", strip=True)
+                    )
+                    content_text = article_text[:2000] or None
+                except Exception:
+                    pass
 
             results.append(
                 NormalizedPost(

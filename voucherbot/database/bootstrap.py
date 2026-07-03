@@ -478,6 +478,9 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         "https://vladtalkstech.com/",
         SourceType.WEBSITE,
         vendor="VladTalksTech",
+        article_selector=".post, article, .entry",
+        title_selector=".entry-title, h2, h1",
+        link_selector=".entry-title a, h2 a, h1 a",
         priority_tier="C",
     ),
 ]

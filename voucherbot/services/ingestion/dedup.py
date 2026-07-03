@@ -1,19 +1,18 @@
 """
 Stage 1 — Deterministic document deduplication.
 
-This module is purely functional (no I/O, no DB) so it is easy to unit-test
-and reason about.
-
 Public API
 ----------
-normalise_url(url)           -> str
-content_hash(title, url)     -> str   (SHA-1 hex, 40 chars)
-deduplicate_batch(posts)     -> list[NormalizedPost]
+normalise_url(url)                    -> str
+identity_hash(url)                    -> str   (SHA-256 hex, stable page identity)
+content_hash(title, content, date)    -> str   (SHA-256 hex, changes when content changes)
+deduplicate_batch(posts)              -> list[NormalizedPost]
 """
 from __future__ import annotations
 
 import hashlib
 import re
+from datetime import datetime
 from typing import Sequence
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 
@@ -73,32 +72,30 @@ def normalise_url(url: str) -> str:
     return urlunparse((scheme, netloc, path, parsed.params, query, fragment))
 
 
-def content_hash(title: str, url: str) -> str:
-    """Return a 40-char SHA-1 hex of ``normalised(title) | normalised(url)``.
+def identity_hash(url: str) -> str:
+    """SHA-256 of the normalised URL — stable identity regardless of content changes."""
+    return hashlib.sha256(normalise_url(url).encode("utf-8")).hexdigest()
 
-    The pipe character acts as a separator so that a title suffix cannot
-    accidentally collide with a URL prefix.
-    """
+
+def content_hash(
+    title: str,
+    content: str | None = None,
+    published_at: datetime | None = None,
+) -> str:
+    """SHA-256 of normalised title + content + date — changes when the page changes."""
     norm_title = re.sub(r"\s+", " ", title.strip().lower())
-    norm_url = normalise_url(url)
-    key = f"{norm_title}|{norm_url}"
-    return hashlib.sha1(key.encode("utf-8")).hexdigest()
+    norm_content = re.sub(r"\s+", " ", (content or "").strip().lower())
+    norm_date = published_at.isoformat() if published_at else ""
+    key = f"{norm_title}|{norm_content}|{norm_date}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:40]
 
 
 def deduplicate_batch(posts: Sequence[NormalizedPost]) -> list[NormalizedPost]:
-    """Remove intra-batch duplicates, keeping the first occurrence of each hash.
-
-    This catches the case where two configured sources point to the same
-    underlying feed / page and fetch the same articles in one pipeline run.
-    Cross-source duplicates from *previous* runs are handled at DB level by
-    the partial unique index on ``posts.content_hash``.
-
-    The returned list preserves the original ordering of unique posts.
-    """
+    """Remove intra-batch duplicates by identity_hash, keeping the first occurrence."""
     seen: set[str] = set()
     unique: list[NormalizedPost] = []
     for post in posts:
-        h = content_hash(post.title, post.url)
+        h = identity_hash(post.url)
         if h not in seen:
             seen.add(h)
             unique.append(post)

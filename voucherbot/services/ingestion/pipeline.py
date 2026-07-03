@@ -1,37 +1,32 @@
 """
-Shared processing pipeline: Collect → Keyword Filter → Doc Dedup → AI Extraction → Event Matching
+Shared processing pipeline: Collect → Keyword Filter → Dedup → AI Extraction → Event Matching
 
-Stage 1 — Document Deduplication (deterministic)
-    Intra-batch duplicates removed in-memory (deduplicate_batch).
-    Cross-source duplicates caught by the partial UNIQUE index on posts.content_hash.
-    Exact duplicates are dropped before AI inference runs.
+Stage 1 — Deduplication
+    identity_hash = SHA-256(normalised URL)  — stable page identity.
+    content_hash  = SHA-256(title|content|date) — changes when the page changes.
+    INSERT on new identity; UPDATE title/content/content_hash when content_hash
+    differs (page was updated). Unchanged pages are skipped entirely.
 
 Stage 2 — AI Extraction
-    Only posts that survived Stage 1 are sent to the AI analyzer.
-    Returns a canonical ExtractedEvent (provider-agnostic).
+    Only new or updated posts are sent to the AI analyzer.
 
 Stage 3 — Canonical Event Matching
-    AI-extracted data is scored against existing Events using configured weights.
     Score >= auto_merge_threshold  → attach to existing Event (AUTO_MERGED).
-    Score in [possible_match, auto_merge) → POSSIBLE_MATCH (for future review).
-    Score < possible_match_threshold → create new canonical Event.
+    Score in [possible_match, auto_merge) → POSSIBLE_MATCH.
+    Score < possible_match_threshold → create new Event.
 
 Stage 4 — Email notification
-    On is_voucher for NEW / POSSIBLE_MATCH posts, email settings.email_id via Resend
-    and set ``is_notified=true``. Status stays PROCESSED. AUTO_MERGED skips email.
-
-All providers produce NormalizedPost objects. Everything after collection
-is provider-agnostic and reused across Reddit, RSS, and Website sources.
+    On is_voucher for NEW / POSSIBLE_MATCH / updated posts, email settings.email_id.
 """
 from __future__ import annotations
 
-import asyncio
 import uuid
 from datetime import datetime, timezone
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voucherbot.config.settings import settings
@@ -39,21 +34,16 @@ from voucherbot.models.keyword import Keyword
 from voucherbot.models.post import Post, PostStatus
 from voucherbot.models.source import Source, SourceType
 from voucherbot.providers.base import BaseCollector, NormalizedPost
-from voucherbot.services.ai.analyzer import analyze_post, analyze_post_batch
+from voucherbot.services.ai.analyzer import analyze_post_batch
 from voucherbot.services.email.notifications import notify_voucher_found
-from voucherbot.services.ingestion.dedup import content_hash, deduplicate_batch
+from voucherbot.services.ingestion.dedup import identity_hash, content_hash
 from voucherbot.services.ingestion.event_matcher import EventMatcher
 from voucherbot.models.event import MatchConfidence
 
 logger = structlog.get_logger(__name__)
 
-# Minimum cumulative keyword score to be queued for AI analysis.
 SCORE_THRESHOLD = 1
-
-# Max content chars sent to AI for non-Note sources.
 _AI_CONTENT_LIMIT = 500
-
-# Module-level EventMatcher instance (stateless, safe to share).
 _event_matcher = EventMatcher()
 
 
@@ -76,10 +66,19 @@ def _fetch_limit_for_source(source: Source, fetch_limit: int | None = None) -> i
         return fetch_limit
     if source.type == SourceType.REDDIT:
         return settings.reddit_fetch_limit
-    config = source.config or {}
-    if config.get("note_selector"):
-        return 50  # curated voucher pages — fetch all items
-    return 10  # conservative default for low-memory environments
+    if (source.config or {}).get("note_selector"):
+        return 50
+    return 10
+
+
+def _ai_content(content: str | None) -> str | None:
+    """Return only the Note line if present, otherwise a short content snippet."""
+    if not content:
+        return None
+    first_line = content.split("\n", 1)[0].strip()
+    if first_line.startswith("Note:"):
+        return first_line
+    return content[:_AI_CONTENT_LIMIT] or None
 
 
 async def run_pipeline_for_source(
@@ -112,113 +111,6 @@ async def run_pipeline_for_source(
     return stats
 
 
-async def run_pipeline(
-    db: AsyncSession,
-    source_type: SourceType,
-    collectors: dict[str, BaseCollector],
-    fetch_limit: int = 25,
-) -> dict:
-    """
-    Run the full ingestion pipeline for all enabled sources of a given type.
-    ``collectors`` maps a string key (e.g., 'rss', 'web', 'reddit') to a BaseCollector.
-    """
-    sync_id = f"Sync-{str(uuid.uuid4())[:8]}"
-    start_time = datetime.now(timezone.utc)
-
-    # Load enabled sources of this type.
-    result = await db.execute(
-        select(Source).where(Source.enabled == True, Source.type == source_type)  # noqa: E712
-    )
-    all_sources = result.scalars().all()
-    sources = [source for source in all_sources if _source_due(source)]
-
-    # Load enabled keywords with scores.
-    kw_result = await db.execute(select(Keyword).where(Keyword.enabled == True))  # noqa: E712
-    keywords: list[Keyword] = kw_result.scalars().all()
-
-    stats = {
-        "sources": len(sources),
-        "skipped": len(all_sources) - len(sources),
-        "fetched": 0,
-        "keyword_filtered": 0,
-        "doc_duplicates": 0,      # Stage 1: exact doc duplicates (same content_hash)
-        "new_posts": 0,
-        "ai_analyzed": 0,
-        "events_created": 0,      # Stage 3: new Events created
-        "events_attached": 0,     # Stage 3: Posts attached to existing Events
-        "possible_matches": 0,    # Stage 3: flagged for future review
-        "errors": 0,
-    }
-    semaphore = asyncio.Semaphore(settings.reddit_concurrency_limit)
-
-    async def process_source(source: Source) -> None:
-        async with semaphore:
-            try:
-                collector = _resolve_collector(source, collectors)
-                if not collector:
-                    logger.error(f"{sync_id} No suitable collector found for {source.name}")
-                    stats["errors"] += 1
-                    return
-
-                s_stats = await _process_one_source(
-                    db, source, collector, keywords, fetch_limit
-                )
-                for k, v in s_stats.items():
-                    stats[k] += v
-            except Exception as e:
-                logger.error(f"{sync_id} Error on {source.name}", error=str(e))
-                stats["errors"] += 1
-                source.error_count += 1
-                await db.commit()
-
-    if sources:
-        for s in sources:
-            await process_source(s)
-
-    duration = (datetime.now(timezone.utc) - start_time).total_seconds()
-    logger.info(
-        f"{sync_id} [{source_type.value}] complete",
-        duration=f"{duration:.1f}s",
-        **stats,
-    )
-    return stats
-
-
-def _source_due(source: Source) -> bool:
-    config = source.config or {}
-    interval = config.get("poll_interval_minutes")
-    if not interval or not source.last_checked_utc:
-        return True
-
-    try:
-        interval_minutes = int(interval)
-    except (TypeError, ValueError):
-        logger.warning(
-            "pipeline: invalid source poll interval",
-            source=source.name,
-            interval=interval,
-        )
-        return True
-
-    now = datetime.now(timezone.utc)
-    last_checked = source.last_checked_utc
-    if last_checked.tzinfo is None:
-        last_checked = last_checked.replace(tzinfo=timezone.utc)
-
-    elapsed_minutes = (now - last_checked).total_seconds() / 60
-    return elapsed_minutes >= interval_minutes
-
-
-def _ai_content(content: str | None) -> str | None:
-    """Return only the Note line if present, otherwise a short content snippet."""
-    if not content:
-        return None
-    first_line = content.split("\n", 1)[0].strip()
-    if first_line.startswith("Note:"):
-        return first_line
-    return content[:_AI_CONTENT_LIMIT] or None
-
-
 async def _process_one_source(
     db: AsyncSession,
     source: Source,
@@ -229,8 +121,9 @@ async def _process_one_source(
     stats = {
         "fetched": 0,
         "keyword_filtered": 0,
-        "doc_duplicates": 0,
+        "unchanged": 0,
         "new_posts": 0,
+        "updated_posts": 0,
         "ai_analyzed": 0,
         "events_created": 0,
         "events_attached": 0,
@@ -246,8 +139,7 @@ async def _process_one_source(
     stats["fetched"] = len(posts)
 
     # ── Keyword Filtering ─────────────────────────────────────────────────────
-    # Sources with note_selector are curated voucher pages — every item is
-    # intentional signal, so skip keyword filtering entirely.
+    # Sources with note_selector are curated voucher pages — skip keyword filter.
     skip_keyword_filter = bool((source.config or {}).get("note_selector"))
     scored: list[tuple[NormalizedPost, int]] = []
     for post in posts:
@@ -274,38 +166,30 @@ async def _process_one_source(
         await db.commit()
         return stats
 
-    # ── Stage 1: Document Deduplication (in-memory batch) ────────────────────
-    # Compute content_hash for every surviving post.
-    hashed: list[tuple[NormalizedPost, int, str]] = [
-        (post, score, content_hash(post.title, post.url))
-        for post, score in scored
-    ]
-
-    # Remove intra-batch duplicates (same content_hash within this pipeline run).
-    seen_hashes: set[str] = set()
-    deduped: list[tuple[NormalizedPost, int, str]] = []
-    for post, score, ch in hashed:
-        if ch in seen_hashes:
-            stats["doc_duplicates"] += 1
+    # ── Stage 1: Dedup + upsert ───────────────────────────────────────────────
+    # identity_hash = SHA-256(normalised URL)       — stable page identity
+    # content_hash  = SHA-256(title|content|date)   — changes when page changes
+    # Intra-batch: drop duplicate URLs seen more than once in this fetch.
+    seen_ids: set[str] = set()
+    deduped: list[tuple[NormalizedPost, int, str, str]] = []
+    for post, score in scored:
+        ih = identity_hash(post.url)
+        ch = content_hash(post.title, post.content, post.published_at)
+        if ih in seen_ids:
+            stats["unchanged"] += 1
         else:
-            seen_hashes.add(ch)
-            deduped.append((post, score, ch))
+            seen_ids.add(ih)
+            deduped.append((post, score, ih, ch))
 
-    # ── Stage 1 cont.: DB upsert with content_hash ───────────────────────────
-    # We use ON CONFLICT DO NOTHING for uq_posts_source_external.
-    # If the partial unique index on content_hash triggers a violation (because
-    # another source already fetched the exact same document), it will raise an
-    # IntegrityError which we catch and ignore.
-    inserted_posts: list[tuple[NormalizedPost, Post]] = []
-    
-    from sqlalchemy.exc import IntegrityError
+    # INSERT on new identity; UPDATE only when content_hash changed.
+    inserted_posts: list[tuple[NormalizedPost, Post, bool]] = []  # (raw, db, is_new)
 
-    for post, score, ch in deduped:
+    for post, score, ih, ch in deduped:
         stmt = (
             insert(Post)
             .values(
                 source_id=source.id,
-                external_id=post.external_id,
+                external_id=ih,
                 url=post.url,
                 title=post.title,
                 content=post.content,
@@ -318,45 +202,73 @@ async def _process_one_source(
                 content_hash=ch,
                 is_notified=False,
             )
-            .on_conflict_do_nothing(constraint="uq_posts_source_external")
+            .on_conflict_do_update(
+                constraint="uq_posts_source_external",
+                set_={
+                    "title": insert(Post).excluded.title,
+                    "content": insert(Post).excluded.content,
+                    "summary": insert(Post).excluded.summary,
+                    "content_hash": insert(Post).excluded.content_hash,
+                    "status": PostStatus.QUEUED,
+                },
+                where=Post.content_hash != ch,
+            )
         )
-        
+
         try:
             async with db.begin_nested():
                 result = await db.execute(stmt)
         except IntegrityError:
-            # Caught uq_posts_content_hash violation; the savepoint has already
-            # been rolled back, so the outer pipeline transaction can continue.
-            stats["doc_duplicates"] += 1
+            stats["unchanged"] += 1
             continue
 
         if result.rowcount == 0:
-            # Caught uq_posts_source_external via ON CONFLICT DO NOTHING
-            stats["doc_duplicates"] += 1
+            # Check if existing post is stuck from a previously failed run.
+            stuck_result = await db.execute(
+                select(Post).where(
+                    Post.source_id == source.id,
+                    Post.external_id == ih,
+                    Post.status == PostStatus.QUEUED,
+                    Post.event_id == None,  # noqa: E711
+                )
+            )
+            stuck_post = stuck_result.scalars().first()
+            if stuck_post:
+                inserted_posts.append((post, stuck_post, True))
+                stats["new_posts"] += 1
+            else:
+                stats["unchanged"] += 1
             continue
 
-        # Fetch the newly inserted row (needed for event_id assignment later).
         inserted_row = await db.execute(
             select(Post).where(
                 Post.source_id == source.id,
-                Post.external_id == post.external_id,
+                Post.external_id == ih,
             )
         )
         db_post = inserted_row.scalars().first()
         if db_post:
-            stats["new_posts"] += 1
-            inserted_posts.append((post, db_post))
+            # rowcount=1 on INSERT sets lastrowid; on DO UPDATE it does not.
+            # Distinguish by checking whether the row already existed before
+            # this upsert: a pure INSERT returns the new id via inserted_primary_key,
+            # a DO UPDATE returns nothing there. Use result.inserted_primary_key.
+            is_new = bool(result.inserted_primary_key and result.inserted_primary_key[0])
+            if is_new:
+                stats["new_posts"] += 1
+            else:
+                stats["updated_posts"] += 1
+            inserted_posts.append((post, db_post, is_new))
 
     # ── Stage 2: AI Extraction ────────────────────────────────────────────────
     pending_notifications = []
     if inserted_posts:
         batch_inputs = [
             (post.title, _ai_content(post.content))
-            for post, _ in inserted_posts
+            for post, _, _ in inserted_posts
         ]
         batch_results = await analyze_post_batch(batch_inputs)
 
-        for (post, db_post), extracted in zip(inserted_posts, batch_results):
+        for (post, db_post, is_new), extracted in zip(inserted_posts, batch_results):
             if extracted is None:
                 continue
 
@@ -372,7 +284,7 @@ async def _process_one_source(
                 )
                 continue
 
-            # ── Stage 3: Canonical Event Matching ─────────────────────────────────
+            # ── Stage 3: Canonical Event Matching ─────────────────────────────
             _event, confidence = await _event_matcher.match_or_create(
                 db, extracted, db_post, source.type
             )
@@ -385,6 +297,7 @@ async def _process_one_source(
             else:
                 stats["events_attached"] += 1
 
+            # Notify on new posts and on updated posts (content changed).
             if confidence != MatchConfidence.AUTO_MERGED:
                 pending_notifications.append((db_post, extracted))
 
@@ -393,9 +306,7 @@ async def _process_one_source(
     source.error_count = 0
     await db.commit()
 
-    # ── Stage 4: Email alert ─────────────────────────────────────────────────
-    # Notify only after posts/events are committed. If a send fails, the post
-    # remains visible in the DB with is_notified=false.
+    # ── Stage 4: Email alert ──────────────────────────────────────────────────
     for db_post, extracted in pending_notifications:
         sent = await notify_voucher_found(db_post, extracted)
         if sent:
