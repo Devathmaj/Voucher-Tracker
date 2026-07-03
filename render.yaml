@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: voucherbot
+    runtime: python
+    buildCommand: pip install -e .
+    startCommand: uvicorn voucherbot.main:app --host 0.0.0.0 --port $PORT
