@@ -28,6 +28,7 @@ ENV/
 htmlcov/
 .tox/
 .nox/
+.agents/
 
 # Type checkers / linters
 .mypy_cache/
