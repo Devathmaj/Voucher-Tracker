@@ -1,12 +1,33 @@
-# Testing
+# 🧪 Testing
 
 This project uses **pytest** for unit and integration testing.
 
-## Prerequisites
+---
+
+## 📋 Table of Contents
+
+1. [Prerequisites](#-prerequisites)
+2. [Configure the Environment](#️-configure-the-environment)
+3. [Install Development Dependencies](#-install-development-dependencies)
+4. [Running the Test Suite](#-running-the-test-suite)
+5. [Understanding the Results](#-understanding-the-results)
+6. [Troubleshooting](#-troubleshooting)
+
+---
+
+## 🧰 Prerequisites
 
 Before running the test suite, create and activate the project's virtual environment.
 
 ### Windows (PowerShell)
+
+Create the virtual environment:
+
+```powershell
+python -m venv .venv
+```
+
+Activate it:
 
 ```powershell
 .venv\Scripts\Activate.ps1
@@ -14,11 +35,21 @@ Before running the test suite, create and activate the project's virtual environ
 
 ### Linux / macOS
 
+Create the virtual environment:
+
+```bash
+python3 -m venv .venv
+```
+
+Activate it:
+
 ```bash
 source .venv/bin/activate
 ```
 
-## Configure the Environment
+---
+
+## ⚙️ Configure the Environment
 
 This project requires several environment variables for configuration.
 
@@ -40,8 +71,11 @@ A template is provided as `.env.example`.
 
    This includes any required database connection strings, email credentials, API keys, and (optionally) Reddit API credentials.
 
-   > **Note:** Reddit-related tests require valid Reddit API credentials. If these values are left blank, the Reddit test(s) are expected to fail.
-## Install Development Dependencies
+   > **📝 Note:** Reddit-related tests require valid Reddit API credentials. If these values are left blank, the Reddit test(s) are expected to fail.
+
+---
+
+## 📦 Install Development Dependencies
 
 Install the project together with all development dependencies:
 
@@ -56,7 +90,9 @@ This installs the project in editable mode and includes development tools such a
 - ruff
 - mypy
 
-## Running the Test Suite
+---
+
+## ▶️ Running the Test Suite
 
 Run all tests:
 
@@ -76,7 +112,9 @@ For more verbose output:
 pytest -v
 ```
 
-## Understanding the Results
+---
+
+## 📊 Understanding the Results
 
 A typical test run will produce output similar to:
 
@@ -86,11 +124,11 @@ A typical test run will produce output similar to:
 1 failed
 ```
 
-### Passed
+### ✅ Passed
 
 Passed tests completed successfully.
 
-### Skipped
+### ⏭️ Skipped
 
 Skipped tests are **intentional** and are **not failures**.
 
@@ -103,7 +141,7 @@ For example:
 
 This confirms that the correct collector is configured for each source rather than indicating a problem.
 
-### Failed
+### ❌ Failed
 
 A failed test indicates that the implementation does not currently match the expected behaviour or that an optional external dependency has not been configured.
 
@@ -117,7 +155,9 @@ To run the complete test suite successfully, populate the Reddit configuration v
 
 Without Reddit credentials, all other tests should still pass successfully.
 
-## Troubleshooting
+---
+
+## 🔧 Troubleshooting
 
 ### `pytest: command not found`
 
@@ -129,6 +169,8 @@ Run:
 pip install -e ".[dev]"
 ```
 
+---
+
 ### `Unknown pytest.mark.asyncio`
 
 `pytest-asyncio` has not been installed.
@@ -138,6 +180,8 @@ Install the development dependencies:
 ```bash
 pip install -e ".[dev]"
 ```
+
+---
 
 ### Missing Environment Variables
 
