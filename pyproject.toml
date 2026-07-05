@@ -2,36 +2,36 @@
 name = "voucherbot"
 version = "0.1.0"
 description = "VoucherBot foundation"
-license = {file = "LICENSE"}
+license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.100.0",
-    "uvicorn[standard]>=0.23.0",
-    "sqlalchemy[asyncio]>=2.0.0",
-    "asyncpg>=0.28.0",
-    "pydantic-settings>=2.0.0",
-    "structlog>=23.1.0",
-    "httpx>=0.24.0",
-    "asyncpraw>=7.7.1",
-    "apscheduler>=3.10.0",
-    "tenacity>=8.2.0",
-    "alembic>=1.12.0",
-    "pgvector>=0.2.4",
-    "feedparser>=6.0.10",
-    "beautifulsoup4>=4.12.2",
-    "lxml>=4.9.3",
-    "google-genai>=1.0.0",
-    "resend>=2.0.0",
-    "groq>=0.31.0",
+    "fastapi==0.139.2",
+    "uvicorn[standard]==0.51.0",
+    "sqlalchemy[asyncio]==2.0.51",
+    "asyncpg==0.31.0",
+    "pydantic-settings==2.14.2",
+    "structlog==26.1.0",
+    "httpx==0.28.1",
+    "asyncpraw==8.0.2",
+    "apscheduler==3.11.3",
+    "tenacity==9.1.4",
+    "alembic==1.18.5",
+    "pgvector==0.5.0",
+    "feedparser==6.0.12",
+    "beautifulsoup4==4.15.0",
+    "lxml==6.1.1",
+    "google-genai==2.12.1",
+    "resend==2.34.0",
+    "groq==1.5.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "ruff==0.15.22",
+    "mypy==2.3.0",
 ]
 
 [tool.ruff]

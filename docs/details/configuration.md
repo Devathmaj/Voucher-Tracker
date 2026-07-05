@@ -1,6 +1,6 @@
 # VoucherBot Configuration
 
-This document collects the configuration values used by VoucherBot and maps them to the settings model in [voucherbot/config/settings.py](../voucherbot/config/settings.py).
+This document collects the configuration values used by VoucherBot and maps them to the settings model in [voucherbot/config/settings.py](../../voucherbot/config/settings.py).
 
 ## Environment-based settings
 

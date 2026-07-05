@@ -20,7 +20,7 @@ The repository currently supports:
 
 ## Source catalog and ingestion model
 
-The source catalog is not hard-coded in the database schema. Instead, it is seeded from [voucherbot/database/bootstrap.py](../voucherbot/database/bootstrap.py), which defines the initial source list and keyword inventory. The catalog covers official vendor feeds, community feeds, event pages, and curated voucher pages.
+The source catalog is not hard-coded in the database schema. Instead, it is seeded from [voucherbot/database/bootstrap.py](../../voucherbot/database/bootstrap.py), which defines the initial source list and keyword inventory. The catalog covers official vendor feeds, community feeds, event pages, and curated voucher pages.
 
 The ingestion model is intentionally modular:
 
@@ -33,12 +33,12 @@ The ingestion model is intentionally modular:
 
 The repository is organized around a few major concerns:
 
-- API and runtime entry point: [voucherbot/main.py](../voucherbot/main.py)
-- configuration and environment handling: [voucherbot/config/settings.py](../voucherbot/config/settings.py)
-- persistence and schema: [voucherbot/models](../voucherbot/models) and [migrations](../migrations)
-- ingestion and matching logic: [voucherbot/services](../voucherbot/services)
-- external integrations: [voucherbot/providers](../voucherbot/providers)
-- test coverage: [tests](../tests)
+- API and runtime entry point: [voucherbot/main.py](../../voucherbot/main.py)
+- configuration and environment handling: [voucherbot/config/settings.py](../../voucherbot/config/settings.py)
+- persistence and schema: [voucherbot/models](../../voucherbot/models) and [migrations](../../migrations)
+- ingestion and matching logic: [voucherbot/services](../../voucherbot/services)
+- external integrations: [voucherbot/providers](../../voucherbot/providers)
+- test coverage: [tests](../../tests)
 
 ## How it is operated
 
@@ -48,10 +48,10 @@ The project is designed to run as a single service with a local Docker setup and
 
 Use the docs in this order:
 
-- [README.md](../README.md) for the short project overview and local setup entry point
-- [docs/architecture.md](architecture.md) for the technical implementation details
-- [docs/testing.md](testing.md) for the test workflow
-- [docs/render-deployment.md](render-deployment.md) and the environment guides in [docs](.) for deployment and external service setup
+- [README.md](../../README.md) for the short project overview and local setup entry point
+- [docs/details/architecture.md](architecture.md) for the technical implementation details
+- [docs/details/testing.md](testing.md) for the test workflow
+- [docs/setup/render-deployment.md](../setup/render-deployment.md) and the environment guides in [docs/setup](../setup) for deployment and external service setup
 
 ## Technical detail preserved from the architecture reference
 

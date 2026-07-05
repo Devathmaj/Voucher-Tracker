@@ -15,14 +15,14 @@ If you're building something for personal/non-commercial use, submit your reques
 
 👉 [Reddit API Request — Personal](https://support.reddithelp.com/hc/en-us/requests/new?ticket_form_id=14868593862164)
 
-![Personal API Request Form](./images/reddit_personal.png)
+![Personal API Request Form](../images/reddit_personal.png)
 
 ### Commercial Use
 If you're building a commercial product or enterprise application, use this form instead:
 
 👉 [Reddit API Request — Commercial/Enterprise](https://support.reddithelp.com/hc/en-us/requests/new?ticket_form_id=14868593862164&tf_42139884615700=api_request_type_enterprise_clone)
 
-![Commercial API Request Form](./images/reddit_commercial.png)
+![Commercial API Request Form](../images/reddit_commercial.png)
 
 ---
 

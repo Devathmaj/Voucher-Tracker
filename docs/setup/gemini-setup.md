@@ -34,7 +34,7 @@ By the end of this guide, you will have:
 
 Click **Get Started**.
 
-![Get Started](./images/gemini_1.png)
+![Get Started](../images/gemini_1.png)
 
 ---
 
@@ -49,7 +49,7 @@ If you wish to use a different Google account, click your email in the bottom-le
 
 | Sign In | Already Signed In |
 |----------|-------------------|
-| ![Sign In](./images/gemini_2.png) | ![Google AI Studio Playground](./images/gemini_3.png) |
+| ![Sign In](../images/gemini_2.png) | ![Google AI Studio Playground](../images/gemini_3.png) |
 
 ---
 
@@ -59,7 +59,7 @@ Once you're inside Google AI Studio, click the **key icon** located on the botto
 
 This opens the **Get an API Key** page.
 
-![Get API Key](./images/gemini_4.png)
+![Get API Key](../images/gemini_4.png)
 
 ---
 
@@ -67,7 +67,7 @@ This opens the **Get an API Key** page.
 
 On the API Keys page, click **Create API Key**.
 
-![Create API Key](./images/gemini_5.png)
+![Create API Key](../images/gemini_5.png)
 
 ---
 
@@ -94,7 +94,7 @@ If you already have a Google Cloud project, simply select it from the dropdown.
 
 If you don't have one yet, choose **Create Project** from the dropdown instead.
 
-![Create New Key](./images/gemini_6.png)
+![Create New Key](../images/gemini_6.png)
 
 ---
 
@@ -108,7 +108,7 @@ Then click **Create Project**.
 
 Google AI Studio will automatically create the project for you and select it in the **Choose an imported project** dropdown.
 
-![Create Project](./images/gemini_7.png)
+![Create Project](../images/gemini_7.png)
 
 ---
 
@@ -118,7 +118,7 @@ Once your project has been selected, click **Create Key**.
 
 Google AI Studio will generate your Gemini API key.
 
-![Generate API Key](./images/gemini_8.png)
+![Generate API Key](../images/gemini_8.png)
 
 ---
 
@@ -135,7 +135,7 @@ It contains information such as:
 
 Copy the API key, or simply click **Copy Key**.
 
-![API Key Details](./images/gemini_9.png)
+![API Key Details](../images/gemini_9.png)
 
 ---
 

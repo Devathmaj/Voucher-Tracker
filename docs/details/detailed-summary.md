@@ -103,7 +103,7 @@ voucherbot/
 
 ## Scheduler
 
-The scheduler is implemented in [voucherbot/services/scheduler.py](../voucherbot/services/scheduler.py). It runs as a single `asyncio.Task` called from the app lifespan. It never uses APScheduler or Celery; scheduling state lives in the `sources` table.
+The scheduler is implemented in [voucherbot/services/scheduler.py](../../voucherbot/services/scheduler.py). It runs as a single `asyncio.Task` called from the app lifespan. It never uses APScheduler or Celery; scheduling state lives in the `sources` table.
 
 ### Loop logic
 
@@ -146,7 +146,7 @@ Each source can override the interval through its config entry.
 
 ## Dispatcher
 
-The dispatcher in [voucherbot/services/dispatcher.py](../voucherbot/services/dispatcher.py) owns the lease and source lifecycle.
+The dispatcher in [voucherbot/services/dispatcher.py](../../voucherbot/services/dispatcher.py) owns the lease and source lifecycle.
 
 ### Lease mechanism
 
@@ -213,7 +213,7 @@ The logic inserts new URLs, updates changed content, and skips unchanged items. 
 
 ### Stage 3 — AI extraction
 
-New or updated posts are sent to [voucherbot/services/ai/analyzer.py](../voucherbot/services/ai/analyzer.py). The analyzer returns an `ExtractedEvent` object with structured promotion fields and an `is_voucher` flag.
+New or updated posts are sent to [voucherbot/services/ai/analyzer.py](../../voucherbot/services/ai/analyzer.py). The analyzer returns an `ExtractedEvent` object with structured promotion fields and an `is_voucher` flag.
 
 The structured fields include:
 
@@ -230,7 +230,7 @@ The structured fields include:
 
 ### Stage 4 — Event matching
 
-The matcher in [voucherbot/services/ingestion/event_matcher.py](../voucherbot/services/ingestion/event_matcher.py) compares extracted fields against existing active events. It uses a weighted score with thresholds for:
+The matcher in [voucherbot/services/ingestion/event_matcher.py](../../voucherbot/services/ingestion/event_matcher.py) compares extracted fields against existing active events. It uses a weighted score with thresholds for:
 
 - registration URL
 - voucher code
@@ -453,11 +453,11 @@ With `IS_PROD=false`, startup runs DB initialization and bootstrap. With `IS_PRO
 
 ### Production (Render)
 
-The repository includes [render.yaml](../render.yaml) for Render deployment. The main startup command is the FastAPI app served through Uvicorn.
+The repository includes [render.yaml](../../render.yaml) for Render deployment. The main startup command is the FastAPI app served through Uvicorn.
 
 ### Source catalog management
 
-Sources are seeded from [voucherbot/database/bootstrap.py](../voucherbot/database/bootstrap.py). The catalog is config-driven, so adding a new feed or page typically requires only a new entry in the source definitions rather than a schema migration.
+Sources are seeded from [voucherbot/database/bootstrap.py](../../voucherbot/database/bootstrap.py). The catalog is config-driven, so adding a new feed or page typically requires only a new entry in the source definitions rather than a schema migration.
 
 Smoke-test all feeds/pages:
 

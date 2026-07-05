@@ -29,7 +29,7 @@ By the end of this guide, you will have:
 
 Click **Get started**.
 
-![Get Started](./images/resend_1.png)
+![Get Started](../images/resend_1.png)
 
 ---
 
@@ -46,7 +46,7 @@ From here, either:
 
 Choose whichever option applies to you.
 
-![Sign Up or Sign In](./images/resend_2.png)
+![Sign Up or Sign In](../images/resend_2.png)
 
 ---
 
@@ -56,7 +56,7 @@ After signing in, you'll be taken to the onboarding page.
 
 Click the **Add API Key** button.
 
-![Add API Key](./images/resend_3.png)
+![Add API Key](../images/resend_3.png)
 
 ---
 
@@ -68,7 +68,7 @@ Copy the API key and keep it somewhere safe.
 
 You will use this key when configuring your project's environment variables.
 
-![API Key](./images/resend_4.png)
+![API Key](../images/resend_4.png)
 
 ---
 

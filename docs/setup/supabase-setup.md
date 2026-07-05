@@ -31,7 +31,7 @@ This guide will help you create and configure a **Supabase PostgreSQL database**
 
 Click **Start your project**.
 
-![Start your project](./images/supabase_1.png)
+![Start your project](../images/supabase_1.png)
 
 ---
 
@@ -48,7 +48,7 @@ From here, either:
 
 Choose whichever option applies to you.
 
-![Sign Up or Sign In](./images/supabase_2.png)
+![Sign Up or Sign In](../images/supabase_2.png)
 
 ---
 
@@ -64,7 +64,7 @@ Fill in the following fields:
 
 Once completed, click **Create Organization**.
 
-![Create Organization](./images/supabase_3.png)
+![Create Organization](../images/supabase_3.png)
 
 ---
 
@@ -113,7 +113,7 @@ This project does not require those options during initial setup.
 
 Once everything is configured, click **Create Project**.
 
-![Create Project](./images/supabase_4.png)
+![Create Project](../images/supabase_4.png)
 
 Wait a few moments while Supabase provisions your PostgreSQL database.
 
@@ -125,7 +125,7 @@ Once your project has finished creating, you'll be taken to the Supabase dashboa
 
 At the top of the page, click **Connect**.
 
-![Connect Button](./images/supabase_5.png)
+![Connect Button](../images/supabase_5.png)
 
 A side panel will open.
 
@@ -159,7 +159,7 @@ Use **Session Pooler** if your environment only has **IPv4 connectivity**.
 
 Many home internet connections and some networks may require this option if IPv6 is unavailable.
 
-![Connection Types](./images/supabase_6.png)
+![Connection Types](../images/supabase_6.png)
 
 ---
 
@@ -219,7 +219,7 @@ Some common encodings are:
 
 Your final connection string should contain the **encoded** password.
 
-![Connection String](./images/supabase_7.png)
+![Connection String](../images/supabase_7.png)
 
 ---
 

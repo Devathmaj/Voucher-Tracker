@@ -33,7 +33,7 @@ By the end of this guide, you will have:
 
 In the top-right corner, click **Start Building**.
 
-![Start Building](./images/groq_1.png)
+![Start Building](../images/groq_1.png)
 
 ---
 
@@ -50,7 +50,7 @@ From here, either:
 
 Choose whichever option applies to you.
 
-![Sign Up or Sign In](./images/groq_2.png)
+![Sign Up or Sign In](../images/groq_2.png)
 
 ---
 
@@ -62,7 +62,7 @@ In the top-right corner, click **API Keys**.
 
 This is where you'll create the API key required by this project.
 
-![API Keys](./images/groq_3.png)
+![API Keys](../images/groq_3.png)
 
 ---
 
@@ -70,7 +70,7 @@ This is where you'll create the API key required by this project.
 
 On the API Keys page, click **Create API Key**.
 
-![Create API Key](./images/groq_4.png)
+![Create API Key](../images/groq_4.png)
 
 A dialog will appear asking for the following:
 
@@ -93,7 +93,7 @@ You can leave this unchanged.
 
 If you prefer rotating API keys regularly or only need the key temporarily, you may choose an expiration date instead.
 
-![API Key Configuration](./images/groq_5.png)
+![API Key Configuration](../images/groq_5.png)
 
 ---
 
@@ -105,7 +105,7 @@ After creating the key, Groq will display the API key.
 >
 > **This is the only time Groq will display your API key. Once you close this window, you cannot view the key again. Make sure to copy it now and store it somewhere safe before clicking _Done_.**
 
-![API Key Created](./images/groq_6.png)
+![API Key Created](../images/groq_6.png)
 
 ---
 
@@ -160,7 +160,7 @@ There you can view information such as:
 - 📈 Usage over time
 - 🔋 Remaining quota (depending on your account)
 
-![Token Usage](./images/groq_7.png)
+![Token Usage](../images/groq_7.png)
 
 ---
 

@@ -8,7 +8,7 @@ VoucherBot is an async Python service that monitors certification-related source
 
 ## Runtime shape
 
-The application entry point is [voucherbot/main.py](../voucherbot/main.py). During startup it:
+The application entry point is [voucherbot/main.py](../../voucherbot/main.py). During startup it:
 
 1. configures logging,
 2. creates tables and seeds source/keyword data when `IS_PROD=false`,
@@ -38,24 +38,24 @@ The high-level execution path is:
 
 The main implementation areas are:
 
-- [voucherbot/main.py](../voucherbot/main.py) — FastAPI app and lifespan startup/shutdown
-- [voucherbot/config/settings.py](../voucherbot/config/settings.py) — environment-driven settings and event-matching weights
-- [voucherbot/database/bootstrap.py](../voucherbot/database/bootstrap.py) — seeded source catalog and keyword catalog
-- [voucherbot/services/scheduler.py](../voucherbot/services/scheduler.py) — scheduler loop and sleep logic
-- [voucherbot/services/dispatcher.py](../voucherbot/services/dispatcher.py) — lease handling, due-source selection, success/failure state updates
-- [voucherbot/services/ingestion/pipeline.py](../voucherbot/services/ingestion/pipeline.py) — end-to-end per-source pipeline
-- [voucherbot/services/ingestion/event_matcher.py](../voucherbot/services/ingestion/event_matcher.py) — canonical event matching and field merging
-- [voucherbot/services/ai/analyzer.py](../voucherbot/services/ai/analyzer.py) — AI extraction provider chain and batching
-- [voucherbot/api/routers](../voucherbot/api/routers) — read-only HTTP endpoints for sources, posts, alerts, and health
+- [voucherbot/main.py](../../voucherbot/main.py) — FastAPI app and lifespan startup/shutdown
+- [voucherbot/config/settings.py](../../voucherbot/config/settings.py) — environment-driven settings and event-matching weights
+- [voucherbot/database/bootstrap.py](../../voucherbot/database/bootstrap.py) — seeded source catalog and keyword catalog
+- [voucherbot/services/scheduler.py](../../voucherbot/services/scheduler.py) — scheduler loop and sleep logic
+- [voucherbot/services/dispatcher.py](../../voucherbot/services/dispatcher.py) — lease handling, due-source selection, success/failure state updates
+- [voucherbot/services/ingestion/pipeline.py](../../voucherbot/services/ingestion/pipeline.py) — end-to-end per-source pipeline
+- [voucherbot/services/ingestion/event_matcher.py](../../voucherbot/services/ingestion/event_matcher.py) — canonical event matching and field merging
+- [voucherbot/services/ai/analyzer.py](../../voucherbot/services/ai/analyzer.py) — AI extraction provider chain and batching
+- [voucherbot/api/routers](../../voucherbot/api/routers) — read-only HTTP endpoints for sources, posts, alerts, and health
 
 ## Scheduler and dispatcher
 
-The scheduler is implemented in [voucherbot/services/scheduler.py](../voucherbot/services/scheduler.py). It runs as a single `asyncio.Task` and loops over two phases:
+The scheduler is implemented in [voucherbot/services/scheduler.py](../../voucherbot/services/scheduler.py). It runs as a single `asyncio.Task` and loops over two phases:
 
 - `_run_sweep()` processes due sources one at a time until none remain due
 - `_seconds_until_next_due()` calculates the next sleep interval
 
-The dispatcher in [voucherbot/services/dispatcher.py](../voucherbot/services/dispatcher.py) is responsible for the coordination logic:
+The dispatcher in [voucherbot/services/dispatcher.py](../../voucherbot/services/dispatcher.py) is responsible for the coordination logic:
 
 - it acquires a row-level lease from the `pipeline_lock` table,
 - selects one eligible source using the same due-source rules as the scheduler,
@@ -67,7 +67,7 @@ A source is considered eligible when it is enabled, not in backoff, and either n
 
 ## Ingestion pipeline
 
-The per-source pipeline is implemented in [voucherbot/services/ingestion/pipeline.py](../voucherbot/services/ingestion/pipeline.py) and runs in this order:
+The per-source pipeline is implemented in [voucherbot/services/ingestion/pipeline.py](../../voucherbot/services/ingestion/pipeline.py) and runs in this order:
 
 ### 1. Collect
 
@@ -94,11 +94,11 @@ The upsert logic inserts new posts, updates changed content, and skips unchanged
 
 ### 4. AI extraction
 
-New or updated posts are sent to [voucherbot/services/ai/analyzer.py](../voucherbot/services/ai/analyzer.py). The current implementation tries Groq models first and uses Gemini as a fallback. The analyzer returns an `ExtractedEvent` object with structured promotion fields and an `is_voucher` flag.
+New or updated posts are sent to [voucherbot/services/ai/analyzer.py](../../voucherbot/services/ai/analyzer.py). The current implementation tries Groq models first and uses Gemini as a fallback. The analyzer returns an `ExtractedEvent` object with structured promotion fields and an `is_voucher` flag.
 
 ### 5. Event matching
 
-The matcher in [voucherbot/services/ingestion/event_matcher.py](../voucherbot/services/ingestion/event_matcher.py) compares extracted fields against existing active events. It uses a weighted score with thresholds for:
+The matcher in [voucherbot/services/ingestion/event_matcher.py](../../voucherbot/services/ingestion/event_matcher.py) compares extracted fields against existing active events. It uses a weighted score with thresholds for:
 
 - registration URL
 - voucher code
@@ -117,11 +117,11 @@ If the AI extraction yields a voucher candidate and the event decision is not `A
 
 The core SQLAlchemy models are:
 
-- [voucherbot/models/source.py](../voucherbot/models/source.py) — `Source` and `SourceType`
-- [voucherbot/models/post.py](../voucherbot/models/post.py) — `Post`, `PostStatus`, `VoucherPost`
-- [voucherbot/models/event.py](../voucherbot/models/event.py) — `Event`, `EventStatus`, `MatchConfidence`
-- [voucherbot/models/keyword.py](../voucherbot/models/keyword.py) — keyword scoring rows used by the pipeline
-- [voucherbot/models/pipeline_lock.py](../voucherbot/models/pipeline_lock.py) — pipeline lease row used by the dispatcher
+- [voucherbot/models/source.py](../../voucherbot/models/source.py) — `Source` and `SourceType`
+- [voucherbot/models/post.py](../../voucherbot/models/post.py) — `Post`, `PostStatus`, `VoucherPost`
+- [voucherbot/models/event.py](../../voucherbot/models/event.py) — `Event`, `EventStatus`, `MatchConfidence`
+- [voucherbot/models/keyword.py](../../voucherbot/models/keyword.py) — keyword scoring rows used by the pipeline
+- [voucherbot/models/pipeline_lock.py](../../voucherbot/models/pipeline_lock.py) — pipeline lease row used by the dispatcher
 
 The important relationships are:
 
@@ -141,12 +141,12 @@ The FastAPI routes are intentionally read-only and do not implement authenticati
 
 ## Configuration and deployment
 
-Configuration is loaded from `.env` through [voucherbot/config/settings.py](../voucherbot/config/settings.py). The important runtime settings include database connection details, AI provider credentials, Reddit credentials, Resend credentials, scraper policy values, and scheduler backoff/lease settings.
+Configuration is loaded from `.env` through [voucherbot/config/settings.py](../../voucherbot/config/settings.py). The important runtime settings include database connection details, AI provider credentials, Reddit credentials, Resend credentials, scraper policy values, and scheduler backoff/lease settings.
 
 The repository includes:
 
-- [docker-compose.yml](../docker-compose.yml) and [Dockerfile](../Dockerfile) for local container-based runs
-- [render.yaml](../render.yaml) for deployment to Render
-- [alembic.ini](../alembic.ini) and the [migrations](../migrations) directory for schema changes
+- [docker-compose.yml](../../docker-compose.yml) and [Dockerfile](../../Dockerfile) for local container-based runs
+- [render.yaml](../../render.yaml) for deployment to Render
+- [alembic.ini](../../alembic.ini) and the [migrations](../../migrations) directory for schema changes
 
 In non-production mode, startup runs DB initialization and bootstrap. In production mode, the app assumes schema and bootstrap data already exist and uses a DML-only role.
