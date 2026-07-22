@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Generator
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Generator
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
