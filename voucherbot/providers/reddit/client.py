@@ -1,4 +1,3 @@
-import asyncio
 import asyncpraw
 from asyncpraw.models import Subreddit
 from asyncprawcore.exceptions import RequestException, ResponseException

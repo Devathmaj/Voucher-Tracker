@@ -15,10 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from voucherbot.config.settings import settings
 from voucherbot.models.base import Base
 from voucherbot.models.event import Event  # noqa: F401 – ensures Event is in Base.metadata
-from voucherbot.models.keyword import Keyword
-from voucherbot.models.post import Post
 from voucherbot.models.pipeline_lock import PipelineLock  # noqa: F401
-from voucherbot.models.source import Source
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -10,7 +10,6 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
 from urllib.parse import urlparse
 
 from voucherbot.providers.base import NormalizedPost

@@ -15,19 +15,17 @@ Coverage:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from voucherbot.config.settings import EventMatcherConfig, settings
+from voucherbot.config.settings import settings
 from voucherbot.models.event import Event, EventStatus, MatchConfidence
 from voucherbot.models.source import SourceType
 from voucherbot.services.ai.schema import ExtractedEvent
 from voucherbot.services.ingestion.event_matcher import (
-    _certs_overlap,
     _dates_overlap,
     _merge_fields,
-    _name_similarity,
     _score_candidate,
 )
 
@@ -264,9 +262,8 @@ class TestConfidenceBands:
 
     @pytest.mark.asyncio
     async def test_auto_merge_threshold(self):
-        from voucherbot.services.ingestion.event_matcher import EventMatcher
 
-        matcher = EventMatcher()
+
         cfg = settings.event_matcher
 
         # Construct a candidate Event whose score will hit >= auto_merge_threshold.

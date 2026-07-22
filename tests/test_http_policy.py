@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from voucherbot.providers import http_policy
 from voucherbot.providers.http_policy import (
     RobotsDisallowedError,
     clear_policy_caches,

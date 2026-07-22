@@ -14,7 +14,7 @@ import enum
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import DateTime, Enum, Integer, String, func
+from sqlalchemy import DateTime, Enum, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
