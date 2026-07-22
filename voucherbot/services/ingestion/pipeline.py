@@ -261,9 +261,7 @@ async def _process_one_source(
                 tuple[Any, ...] | None,
                 cast(CursorResult[Any], result).inserted_primary_key,
             )
-            is_new = bool(
-                inserted_primary_key and inserted_primary_key[0]
-            )
+            is_new = bool(inserted_primary_key and inserted_primary_key[0])
             if is_new:
                 stats["new_posts"] += 1
             else:

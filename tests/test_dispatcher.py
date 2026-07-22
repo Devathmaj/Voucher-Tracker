@@ -1,8 +1,8 @@
-import typing
 """Tests for DB-driven scheduler dispatcher logic."""
 
 from __future__ import annotations
 
+import typing
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -225,7 +225,9 @@ async def test_mark_failure_applies_backoff() -> None:
 
 
 @pytest.mark.asyncio
-async def test_pick_due_source_skips_reddit_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_pick_due_source_skips_reddit_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from voucherbot.services.dispatcher import _pick_due_source
 
     monkeypatch.setattr(

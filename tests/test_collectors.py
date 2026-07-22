@@ -157,7 +157,9 @@ def test_scraper_user_agent_is_identifying() -> None:
 @pytest.mark.asyncio
 async def test_rss_collector_parses_xml_feed() -> None:
     collector = RssCollector()
-    response: httpx.Response = _mock_response("https://example.com/feed.xml", content=SAMPLE_RSS)
+    response: httpx.Response = _mock_response(
+        "https://example.com/feed.xml", content=SAMPLE_RSS
+    )
 
     with patch(
         "voucherbot.providers.rss.collector.polite_get",
@@ -265,9 +267,7 @@ async def test_modified_website_sources_scrape_or_are_unsupported(
     mock_get = AsyncMock(return_value=response)
 
     with patch("voucherbot.providers.website.collector.polite_get", new=mock_get):
-        website_posts: list[NormalizedPost] = await collector.collect(
-            config, limit=3
-        )
+        website_posts: list[NormalizedPost] = await collector.collect(config, limit=3)
 
     assert len(website_posts) >= 1
     assert website_posts[0].title

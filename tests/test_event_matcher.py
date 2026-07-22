@@ -74,7 +74,9 @@ class TestScoreCandidate:
 
     def test_registration_url_exact_match_scores_50(self) -> None:
         e: Event = _event(registration_url="https://learn.microsoft.com/promo")
-        x: ExtractedEvent = _extracted(registration_url="https://learn.microsoft.com/promo")
+        x: ExtractedEvent = _extracted(
+            registration_url="https://learn.microsoft.com/promo"
+        )
         assert _score_candidate(e, x) >= self.cfg.weight_registration_url
 
     def test_registration_url_utm_ignored(self) -> None:
@@ -285,8 +287,12 @@ class TestConfidenceBands:
     @pytest.mark.asyncio
     async def test_possible_match_band(self) -> None:
         cfg: EventMatcherConfig = settings.event_matcher
-        candidate: Event = _event(id=1, vendor="microsoft", promotion_name="AI Skills Fest")
-        extracted: ExtractedEvent = _extracted(vendor="microsoft", promotion_name="AI Skills Fest")
+        candidate: Event = _event(
+            id=1, vendor="microsoft", promotion_name="AI Skills Fest"
+        )
+        extracted: ExtractedEvent = _extracted(
+            vendor="microsoft", promotion_name="AI Skills Fest"
+        )
 
         # vendor (15) + name_similarity likely full weight (20) = 35 < 60
         # This confirms that only vendor + name is insufficient for auto-merge.
