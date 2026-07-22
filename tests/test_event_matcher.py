@@ -263,7 +263,6 @@ class TestConfidenceBands:
     @pytest.mark.asyncio
     async def test_auto_merge_threshold(self):
 
-
         cfg = settings.event_matcher
 
         # Construct a candidate Event whose score will hit >= auto_merge_threshold.
