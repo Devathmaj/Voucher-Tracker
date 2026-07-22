@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any, Generator
 from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 
 from voucherbot.database.bootstrap import SOURCE_DEFINITIONS
+from voucherbot.providers.base import NormalizedPost
 from voucherbot.providers.http_policy import clear_policy_caches, scraper_user_agent
 from voucherbot.providers.rss.collector import (
     RssCollector,
@@ -55,14 +57,14 @@ def _mock_response(
     return httpx.Response(200, request=request, content=content, text=text)
 
 
-def _source_by_name(name_suffix: str) -> dict:
+def _source_by_name(name_suffix: str) -> dict[str, Any]:
     for source in SOURCE_DEFINITIONS:
         if source["name"] == name_suffix or source["name"].endswith(name_suffix):
             return source
     raise KeyError(name_suffix)
 
 
-MODIFIED_SOURCES = [
+MODIFIED_SOURCES: list[str] = [
     "blog:microsoft_learn_blog",
     "blog:microsoft_events",
     "blog:google_cloud_blog",
@@ -80,7 +82,7 @@ MODIFIED_SOURCES = [
     "website:red_hat_training_specials",
 ]
 
-POLICY_BLOCKED = {
+POLICY_BLOCKED: set[str] = {
     "rss:cloud_academy_blog",
     "event:aws_events",
     "event:aws_reinvent",
@@ -91,7 +93,7 @@ POLICY_BLOCKED = {
 
 
 @pytest.fixture(autouse=True)
-def _reset_policy_state(monkeypatch: pytest.MonkeyPatch):
+def _reset_policy_state(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     clear_policy_caches()
     monkeypatch.setattr(
         "voucherbot.providers.http_policy.settings.scraper_respect_robots",
@@ -107,13 +109,13 @@ def _reset_policy_state(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.parametrize("source_name", MODIFIED_SOURCES)
 def test_modified_source_definition_exists(source_name: str) -> None:
-    source = _source_by_name(source_name)
+    source: dict[str, Any] = _source_by_name(source_name)
     assert source["name"] == source_name
 
 
 @pytest.mark.parametrize("source_name", sorted(POLICY_BLOCKED))
 def test_policy_blocked_sources_are_unsupported(source_name: str) -> None:
-    source = _source_by_name(source_name)
+    source: dict[str, Any] = _source_by_name(source_name)
     assert source["config"].get("unsupported") is True
     assert source.get("enabled") is False
     assert source["config"].get("unsupported_reason")
@@ -147,7 +149,7 @@ def test_looks_like_html() -> None:
 
 
 def test_scraper_user_agent_is_identifying() -> None:
-    ua = scraper_user_agent()
+    ua: str = scraper_user_agent()
     assert "VoucherBot" in ua
     assert "Mozilla/5.0" not in ua
 
@@ -155,13 +157,13 @@ def test_scraper_user_agent_is_identifying() -> None:
 @pytest.mark.asyncio
 async def test_rss_collector_parses_xml_feed() -> None:
     collector = RssCollector()
-    response = _mock_response("https://example.com/feed.xml", content=SAMPLE_RSS)
+    response: httpx.Response = _mock_response("https://example.com/feed.xml", content=SAMPLE_RSS)
 
     with patch(
         "voucherbot.providers.rss.collector.polite_get",
         new=AsyncMock(return_value=response),
     ):
-        posts = await collector.collect(
+        posts: list[NormalizedPost] = await collector.collect(
             {"feed_url": "https://example.com/feed.xml"}, limit=5
         )
 
@@ -173,7 +175,7 @@ async def test_rss_collector_parses_xml_feed() -> None:
 @pytest.mark.asyncio
 async def test_rss_collector_parses_json_feed() -> None:
     collector = RssCollector()
-    response = _mock_response(
+    response: httpx.Response = _mock_response(
         "https://newsroom.example.com/rssfeed.json", content=SAMPLE_JSON
     )
 
@@ -181,7 +183,7 @@ async def test_rss_collector_parses_json_feed() -> None:
         "voucherbot.providers.rss.collector.polite_get",
         new=AsyncMock(return_value=response),
     ):
-        posts = await collector.collect(
+        posts: list[NormalizedPost] = await collector.collect(
             {"feed_url": "https://newsroom.example.com/rssfeed.json"},
             limit=5,
         )
@@ -194,7 +196,7 @@ async def test_rss_collector_parses_json_feed() -> None:
 @pytest.mark.asyncio
 async def test_rss_collector_rejects_html_response() -> None:
     collector = RssCollector()
-    response = _mock_response(
+    response: httpx.Response = _mock_response(
         "https://cloud.google.com/blog/rss",
         content=b"<!doctype html><html></html>",
     )
@@ -203,7 +205,7 @@ async def test_rss_collector_rejects_html_response() -> None:
         "voucherbot.providers.rss.collector.polite_get",
         new=AsyncMock(return_value=response),
     ):
-        posts = await collector.collect(
+        posts: list[NormalizedPost] = await collector.collect(
             {"feed_url": "https://cloud.google.com/blog/rss"}, limit=5
         )
 
@@ -215,7 +217,7 @@ async def test_rss_collector_rejects_html_response() -> None:
 async def test_modified_rss_sources_use_headers_or_are_unsupported(
     source_name: str,
 ) -> None:
-    source = _source_by_name(source_name)
+    source: dict[str, Any] = _source_by_name(source_name)
     config = source["config"]
 
     if "feed_url" not in config:
@@ -223,15 +225,17 @@ async def test_modified_rss_sources_use_headers_or_are_unsupported(
 
     collector = RssCollector()
     if config.get("unsupported"):
-        posts = await collector.collect(config, limit=3)
-        assert posts == []
+        unsupported_posts: list[NormalizedPost] = await collector.collect(
+            config, limit=3
+        )
+        assert unsupported_posts == []
         return
 
-    response = _mock_response(config["feed_url"], content=SAMPLE_RSS)
+    response: httpx.Response = _mock_response(config["feed_url"], content=SAMPLE_RSS)
     mock_get = AsyncMock(return_value=response)
 
     with patch("voucherbot.providers.rss.collector.polite_get", new=mock_get):
-        posts = await collector.collect(config, limit=3)
+        posts: list[NormalizedPost] = await collector.collect(config, limit=3)
 
     assert len(posts) == 1
     mock_get.assert_awaited_once()
@@ -243,7 +247,7 @@ async def test_modified_rss_sources_use_headers_or_are_unsupported(
 async def test_modified_website_sources_scrape_or_are_unsupported(
     source_name: str,
 ) -> None:
-    source = _source_by_name(source_name)
+    source: dict[str, Any] = _source_by_name(source_name)
     config = source["config"]
 
     if "url" not in config:
@@ -251,31 +255,35 @@ async def test_modified_website_sources_scrape_or_are_unsupported(
 
     collector = WebsiteCollector()
     if config.get("unsupported"):
-        posts = await collector.collect(config, limit=3)
-        assert posts == []
+        unsupported_posts: list[NormalizedPost] = await collector.collect(
+            config, limit=3
+        )
+        assert unsupported_posts == []
         return
 
-    response = _mock_response(config["url"], text=SAMPLE_HTML)
+    response: httpx.Response = _mock_response(config["url"], text=SAMPLE_HTML)
     mock_get = AsyncMock(return_value=response)
 
     with patch("voucherbot.providers.website.collector.polite_get", new=mock_get):
-        posts = await collector.collect(config, limit=3)
+        website_posts: list[NormalizedPost] = await collector.collect(
+            config, limit=3
+        )
 
-    assert len(posts) >= 1
-    assert posts[0].title
+    assert len(website_posts) >= 1
+    assert website_posts[0].title
 
 
 @pytest.mark.asyncio
 async def test_website_collector_uses_article_text_when_title_selector_misses() -> None:
     collector = WebsiteCollector()
     html = "<html><body><h2>Standalone heading</h2></body></html>"
-    response = _mock_response("https://example.com/events/", text=html)
+    response: httpx.Response = _mock_response("https://example.com/events/", text=html)
 
     with patch(
         "voucherbot.providers.website.collector.polite_get",
         new=AsyncMock(return_value=response),
     ):
-        posts = await collector.collect(
+        posts: list[NormalizedPost] = await collector.collect(
             {
                 "url": "https://example.com/events/",
                 "article_selector": "h2",

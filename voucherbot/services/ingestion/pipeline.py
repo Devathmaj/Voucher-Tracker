@@ -257,10 +257,13 @@ async def _process_one_source(
             # Distinguish by checking whether the row already existed before
             # this upsert: a pure INSERT returns the new id via inserted_primary_key,
             # a DO UPDATE returns nothing there. Use result.inserted_primary_key.
+            inserted_primary_key = cast(
+                tuple[Any, ...] | None,
+                cast(CursorResult[Any], result).inserted_primary_key,
+            )
             is_new = bool(
-                cast(CursorResult[Any], result).inserted_primary_key
-                and cast(CursorResult[Any], result).inserted_primary_key[0]
-            )  # type: ignore[index]
+                inserted_primary_key and inserted_primary_key[0]
+            )
             if is_new:
                 stats["new_posts"] += 1
             else:

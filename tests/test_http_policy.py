@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from typing import Any, Generator
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -16,7 +17,7 @@ from voucherbot.providers.http_policy import (
 
 
 @pytest.fixture(autouse=True)
-def _reset(monkeypatch: pytest.MonkeyPatch):
+def _reset(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     clear_policy_caches()
     monkeypatch.setattr(
         "voucherbot.providers.http_policy.settings.scraper_respect_robots",

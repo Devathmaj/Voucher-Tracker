@@ -1,3 +1,4 @@
+import typing
 """Tests for DB-driven scheduler dispatcher logic."""
 
 from __future__ import annotations
@@ -16,8 +17,8 @@ from voucherbot.services.dispatcher import (
 )
 
 
-def _source(**kwargs) -> Source:
-    defaults = dict(
+def _source(**kwargs: typing.Any) -> Source:
+    defaults: dict[str, typing.Any] = dict(
         id=1,
         name="rss:test",
         type=SourceType.RSS,
@@ -224,7 +225,7 @@ async def test_mark_failure_applies_backoff() -> None:
 
 
 @pytest.mark.asyncio
-async def test_pick_due_source_skips_reddit_when_disabled(monkeypatch) -> None:
+async def test_pick_due_source_skips_reddit_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     from voucherbot.services.dispatcher import _pick_due_source
 
     monkeypatch.setattr(
