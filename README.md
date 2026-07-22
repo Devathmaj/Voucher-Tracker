@@ -21,6 +21,8 @@
 - [🚀 Deployment](#-deployment)
 - [🛠️ Environment Setup Guides](#%EF%B8%8F-environment-setup-guides)
 - [📚 Additional Documentation](#-additional-documentation)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
 - [🎯 Goals](#-goals)
 
 ---
@@ -39,12 +41,12 @@ Follow the steps below to deploy the project.
 
 | Step | Action |
 |------|--------|
-| **1** | **Fork or download the repository.** Forking is the recommended approach, since the project includes a `render.yaml` file that works with Render's GitHub integration — making deployment and future updates significantly easier through automatic CI/CD. Alternatively, download the source code manually if you don't intend to use GitHub integration. |
+| **1** | **Fork or download the repository.** Forking is the recommended approach, since the project includes a `Dockerfile` and a `render.yaml` file — Render can use either of these to build and run the application, and GitHub integration makes future updates significantly easier through automatic CI/CD. Alternatively, download the source code manually if you don't intend to use GitHub integration. |
 | **2** | **Clone your fork locally** *(optional)*. This step isn't strictly necessary unless you want to modify the code itself. For a standard Render deployment, you only need to download `.env.example` from the repository, rename it to `.env`, and populate it with your own values — no local clone required. If you do want to work with the code, clone your forked repository to your development machine, or use GitHub's integrated web-based code editor instead of cloning locally. |
 | **3** | **Configure your environment variables.** Complete every guide in the [🛠️ Environment Setup Guides](#%EF%B8%8F-environment-setup-guides) section below to obtain all required API keys, database credentials, and other configuration values. Populate your local `.env` file with the values from those guides. |
 | **4** | **Save your environment variables.** Once your `.env` file is complete, either keep it so it can be uploaded directly to Render, **or** save all environment variable names and values somewhere secure to enter manually in the Render dashboard during deployment. |
-| **5** | **Deploy to Render.** Follow the [Render Deployment Guide](./docs/setup/render-deployment.md) to connect your repository to Render, import the included `render.yaml` configuration, configure your environment variables, and complete the deployment. |
-| **6** | **(Optional) Prevent your Render service from spinning down.** If you're using Render's free tier, your service may become inactive after a period of no traffic. To keep it awake automatically, you can configure UptimeRobot to periodically ping your application. See the [UptimeRobot Setup Guide](./docs/setup/uptime-bot-setup.md) for instructions. |
+| **5** | **Deploy to Render.** Head to the [🚀 Deployment Guides](#-deployment-guides) section below and follow the guides there to connect your repository to Render, configure your environment variables, and complete the deployment. |
+
 > 💡 **Tip:** Steps 3–4 go faster if you open each setup guide in its own browser tab before you start.
 
 🎉 **Voilà!** Your app is now up and running. VoucherBot will continuously monitor your configured sources in the background and automatically deliver any certification vouchers it finds straight to your email — no manual checking required.
@@ -65,21 +67,40 @@ Before running the project, you'll need to configure a few external services. Ea
 
 > ⚠️ **Complete these guides** before moving on to running or testing the project.
 
+### 🚀 Deployment Guides
+
+These guides cover getting your app running in the cloud and keeping it alive. They are separate from environment setup — complete the environment guides above first.
+
+| Guide | Description |
+|-------|-------------|
+| 🚀 [Render Deployment](./docs/setup/render-deployment.md) | Deploy the application to Render — covers connecting your repository, configuring environment variables, and completing the deployment. |
+| ⏱️ [UptimeRobot Setup](./docs/setup/uptime-bot-setup.md) *(optional)* | Prevent your Render free tier service from spinning down by setting up a monitor that periodically pings your app. |
+
 ---
 
 ## 📚 Additional Documentation
 
 | Resource | Description |
-|----------|--------------|
+|----------|-------------|
 | 🏗️ [Architecture](./docs/details/architecture.md) | A detailed overview of the system architecture, application components, data flow, and design decisions. |
 | 📋 [Detailed Summary](./docs/details/detailed-summary.md) | A highly detailed summary of the entire project. |
 | ⚙️ [Configuration](./docs/details/configuration.md) | A full reference of all available configurations. |
 | 🗂️ [Schema](./docs/details/schema.md) | The project's data schema. |
 | ℹ️ [Project Info](./docs/details/project-info.md) | General information about the project. |
-| 🧪 [Testing](./docs/details/testing.md) | How to run the automated test suite (located in [`tests`](./tests)), what to expect while testing, and simple troubleshooting steps. |
-| 📰 [Sources](./sources/README.md) | An overview of all the sources used by the project, located in the [`sources`](./sources) directory. |
-| 🤝 [Contributing](./CONTRIBUTING.md) | Contribution guidelines, development workflow, and best practices. |
-| 📄 [License](./LICENSE) | The project's license. |
+| 🧪 [Testing](./docs/details/testing.md) | How to run the automated test suite, what to expect while testing, and simple troubleshooting steps. |
+| 📰 [Sources](./sources/README.md) | An overview of all the sources used by the project. |
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidelines, development workflow, and best practices before submitting a pull request.
+
+---
+
+## 📄 License
+
+This project is licensed under the terms described in [LICENSE](./LICENSE).
 
 ---
 
@@ -90,4 +111,3 @@ Before running the project, you'll need to configure a few external services. Ea
 - 🎯 **Minimize false positives** using AI-assisted filtering.
 - 🔔 **Provide timely notifications** for new certification opportunities.
 - 🧩 **Offer an extensible platform** that supports additional providers with minimal development effort.
-

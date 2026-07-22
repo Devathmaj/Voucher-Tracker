@@ -37,6 +37,18 @@ REDDIT_CLIENT_SECRET=your_client_secret
 
 ---
 
+## ⏳ Still Waiting for Approval?
+
+Since Reddit API approval can take days or even weeks, you don't have to wait for it before deploying the project. You can disable Reddit ingestion in your `.env` file in the meantime:
+
+```dotenv
+REDDIT_INGESTION_ENABLED=false
+```
+
+Set this back to `true` and add your credentials once your request is approved.
+
+---
+
 ## ⚠️ A Note from the Author
 
 At the time of writing, I have not yet received my own API credentials from Reddit, so unfortunately I'm unable to provide further step-by-step instructions beyond this point. Here's hoping your request gets approved — good luck! 🤞
