@@ -4,6 +4,7 @@ DB-driven pipeline dispatcher.
 Each tick acquires a Postgres lease, picks exactly one due source, runs the
 pipeline for that source, updates scheduling fields, and releases the lease.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -36,8 +37,16 @@ _TIER_DEFAULT_MINUTES = {
 # These skip backoff and disable the source immediately.
 _UNRECOVERABLE_HTTP = {400, 401, 403, 404, 410, 451}
 _UNRECOVERABLE_PATTERNS = (
-    "404", "403", "401", "410", "not found", "forbidden",
-    "unauthorized", "gone", "no longer available", "does not exist",
+    "404",
+    "403",
+    "401",
+    "410",
+    "not found",
+    "forbidden",
+    "unauthorized",
+    "gone",
+    "no longer available",
+    "does not exist",
 )
 
 
@@ -108,7 +117,7 @@ async def _acquire_lease(session: AsyncSession, holder_id: str) -> bool:
             "holder_id": holder_id,
             "now": now,
             "expires_at": expires_at,
-                        "boot_at": PROCESS_BOOT_AT,
+            "boot_at": PROCESS_BOOT_AT,
             "lock_name": LOCK_NAME,
         },
     )
@@ -309,7 +318,9 @@ async def dispatch_tick(
                     stats = await run_pipeline_for_source(session, source, collectors)
             else:
                 stats = await run_pipeline_for_source(session, source, collectors)
-            elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
+            elapsed_ms = int(
+                (datetime.now(timezone.utc) - start).total_seconds() * 1000
+            )
             await _mark_success(session, source, elapsed_ms)
             logger.info(
                 "dispatcher: tick ran",
@@ -317,13 +328,24 @@ async def dispatch_tick(
                 elapsed_ms=elapsed_ms,
                 **stats,
             )
-            return {"status": "ran", "source": source_name, "elapsed_ms": elapsed_ms, **stats}
+            return {
+                "status": "ran",
+                "source": source_name,
+                "elapsed_ms": elapsed_ms,
+                **stats,
+            }
         except Exception as exc:
-            elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
+            elapsed_ms = int(
+                (datetime.now(timezone.utc) - start).total_seconds() * 1000
+            )
             await session.rollback()
             if _is_unrecoverable(exc):
                 await _mark_unrecoverable(session, source, str(exc))
-                return {"status": "skipped", "source": source_name, "reason": str(exc)[:120]}
+                return {
+                    "status": "skipped",
+                    "source": source_name,
+                    "reason": str(exc)[:120],
+                }
             await _mark_failure(session, failure_source, elapsed_ms)
             logger.error(
                 "dispatcher: tick failed",

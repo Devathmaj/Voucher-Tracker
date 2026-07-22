@@ -40,6 +40,7 @@ Posts are NEVER merged.  Many Posts may reference the same Event via the
 ``Post.event_id`` FK.  The ``Event.posts`` relationship provides full
 provenance.
 """
+
 from __future__ import annotations
 
 import difflib
@@ -78,6 +79,7 @@ _MERGEABLE_FIELDS: tuple[str, ...] = (
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _source_priority(source_type: SourceType) -> int:
     """Lower return value = higher authority (0 is most authoritative)."""
     try:
@@ -108,6 +110,7 @@ def _dates_overlap(
     x_end: Optional[str],
 ) -> bool:
     """Return True if date ranges overlap, or if both have no dates (unknown)."""
+
     def _parse(s: Optional[str]) -> Optional[datetime]:
         if not s:
             return None
@@ -146,7 +149,9 @@ def _score_candidate(event: Event, extracted: ExtractedEvent) -> int:
 
     # 1. registration_url — exact normalised URL match
     if event.registration_url and extracted.registration_url:
-        if normalise_url(event.registration_url) == normalise_url(extracted.registration_url):
+        if normalise_url(event.registration_url) == normalise_url(
+            extracted.registration_url
+        ):
             score += cfg.weight_registration_url
 
     # 2. voucher_code — exact case-normalised match
@@ -169,7 +174,9 @@ def _score_candidate(event: Event, extracted: ExtractedEvent) -> int:
         score += cfg.weight_certifications
 
     # 6. date overlap
-    if _dates_overlap(event.start_date, event.end_date, extracted.start_date, extracted.end_date):
+    if _dates_overlap(
+        event.start_date, event.end_date, extracted.start_date, extracted.end_date
+    ):
         score += cfg.weight_date_overlap
 
     return score
@@ -253,6 +260,7 @@ def _get_event_field_source_priority(event: Event, field: str) -> int:
 
 def _extracted_to_event_fields(extracted: ExtractedEvent) -> dict[str, Any]:
     """Map an ExtractedEvent to a dict of Event column values."""
+
     def _parse_date(s: Optional[str]) -> Optional[datetime]:
         if not s:
             return None
@@ -279,6 +287,7 @@ def _extracted_to_event_fields(extracted: ExtractedEvent) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # EventMatcher
 # ---------------------------------------------------------------------------
+
 
 class EventMatcher:
     """Match AI-extracted post data to a canonical Event, or create a new one.
@@ -376,7 +385,9 @@ class EventMatcher:
                 "post_id": post.id,
                 "match_score": 0,
                 "match_confidence": MatchConfidence.NEW.value,
-                "fields_updated": [f for f in _MERGEABLE_FIELDS if fields.get(f) is not None],
+                "fields_updated": [
+                    f for f in _MERGEABLE_FIELDS if fields.get(f) is not None
+                ],
             }
             best_event.merge_log = [first_log_entry]
 

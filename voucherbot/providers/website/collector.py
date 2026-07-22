@@ -25,7 +25,9 @@ class WebsiteCollector(BaseCollector):
     marked ``unsupported`` (ToS / policy block) are skipped entirely.
     """
 
-    async def collect(self, source_config: dict[str, Any], limit: int = 50) -> list[NormalizedPost]:
+    async def collect(
+        self, source_config: dict[str, Any], limit: int = 50
+    ) -> list[NormalizedPost]:
         if source_config.get("unsupported"):
             logger.info(
                 "WebsiteCollector: source marked unsupported",
@@ -66,7 +68,11 @@ class WebsiteCollector(BaseCollector):
         results: list[NormalizedPost] = []
         for article in articles:
             title_el = article.select_one(title_selector)
-            link_el = article if link_selector == "self" else article.select_one(link_selector)
+            link_el = (
+                article
+                if link_selector == "self"
+                else article.select_one(link_selector)
+            )
 
             title = title_el.get_text(strip=True) if title_el else ""
             if not title:
@@ -79,6 +85,7 @@ class WebsiteCollector(BaseCollector):
 
             if href and not href.startswith("http"):
                 from urllib.parse import urljoin
+
                 href = urljoin(url, href)
 
             external_id = hashlib.sha1(f"{url}:{href}:{title}".encode()).hexdigest()
@@ -86,25 +93,31 @@ class WebsiteCollector(BaseCollector):
             raw_content = article.get_text(separator=" ", strip=True) or None
             if note_selector:
                 note_el = article.select_one(note_selector)
-                note_text = note_el.get_text(separator=" ", strip=True) if note_el else None
-                content = f"Note: {note_text}\n{raw_content}" if note_text else raw_content
+                note_text = (
+                    note_el.get_text(separator=" ", strip=True) if note_el else None
+                )
+                content = (
+                    f"Note: {note_text}\n{raw_content}" if note_text else raw_content
+                )
             else:
                 content = raw_content
 
-            results.append(NormalizedPost(
-                external_id=external_id,
-                url=href or url,
-                title=title or href,
-                content=content,
-                summary=None,
-                author=None,
-                published_at=None,
-                raw_data={
-                    "scraped_from": url,
-                    "article_selector": article_selector,
-                    "vendor": source_config.get("vendor"),
-                },
-            ))
+            results.append(
+                NormalizedPost(
+                    external_id=external_id,
+                    url=href or url,
+                    title=title or href,
+                    content=content,
+                    summary=None,
+                    author=None,
+                    published_at=None,
+                    raw_data={
+                        "scraped_from": url,
+                        "article_selector": article_selector,
+                        "vendor": source_config.get("vendor"),
+                    },
+                )
+            )
 
         logger.info("WebsiteCollector: collected", url=url, count=len(results))
         return results

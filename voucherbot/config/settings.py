@@ -38,7 +38,7 @@ class EventMatcherConfig(BaseModel):
 # Event (a higher-priority source's non-null value wins over a lower-priority
 # source's non-null value).
 SOURCE_PRIORITY: list[str] = [
-    "WEBSITE",   # official vendor / event pages
+    "WEBSITE",  # official vendor / event pages
     "EVENT",
     "BLOG",
     "RSS",
@@ -95,9 +95,13 @@ class Settings(BaseSettings):
     # constructing Settings(event_matcher=EventMatcherConfig(...)))
     event_matcher: EventMatcherConfig = EventMatcherConfig()
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
-    @field_validator("tick_job_timeout_seconds", "groq_tokens_per_minute", mode="before")
+    @field_validator(
+        "tick_job_timeout_seconds", "groq_tokens_per_minute", mode="before"
+    )
     @classmethod
     def empty_string_as_none(cls, value: object) -> object:
         if value == "":

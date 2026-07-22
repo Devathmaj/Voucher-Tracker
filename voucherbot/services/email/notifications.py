@@ -1,4 +1,5 @@
 """Voucher alert emails via Resend."""
+
 from __future__ import annotations
 
 import html

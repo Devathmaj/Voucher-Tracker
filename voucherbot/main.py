@@ -15,6 +15,7 @@ from voucherbot.services.scheduler import start_scheduler, stop_scheduler
 
 logger = structlog.get_logger()
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_logging()
@@ -31,7 +32,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await logger.ainfo("Skipping DB init/bootstrap (IS_PROD=true)")
 
     async with AsyncSessionLocal() as session:
-        await session.execute(update(Source).values(next_due_at=None, backoff_until=None))
+        await session.execute(
+            update(Source).values(next_due_at=None, backoff_until=None)
+        )
         await session.commit()
     await logger.ainfo("scheduler: all sources reset to due")
 
@@ -43,6 +46,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
     await stop_scheduler()
     await logger.ainfo("Shutting down VoucherBot API...")
+
 
 app = FastAPI(
     title="VoucherBot API",

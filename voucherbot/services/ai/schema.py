@@ -5,6 +5,7 @@ Every LLM provider adapter (Groq, Gemini, future providers) is responsible for
 converting its raw response into an ``ExtractedEvent``.  The rest of the
 ingestion pipeline only ever sees this type — never a provider-specific dict.
 """
+
 from __future__ import annotations
 
 from typing import Optional
@@ -27,14 +28,14 @@ class ExtractedEvent(BaseModel):
     # --- Extracted promotion fields ---
     vendor: Optional[str] = None
     promotion_name: Optional[str] = None
-    promotion_type: Optional[str] = None       # e.g. "voucher", "discount", "free_exam"
+    promotion_type: Optional[str] = None  # e.g. "voucher", "discount", "free_exam"
     certifications: Optional[list[str]] = None  # e.g. ["AZ-104", "SC-300"]
     voucher_code: Optional[str] = None
-    discount: Optional[str] = None             # e.g. "50%" or "$100"
+    discount: Optional[str] = None  # e.g. "50%" or "$100"
     registration_url: Optional[str] = None
-    start_date: Optional[str] = None           # ISO 8601 date string or None
-    end_date: Optional[str] = None             # ISO 8601 date string or None
-    regions: Optional[list[str]] = None        # e.g. ["US", "Global"]
+    start_date: Optional[str] = None  # ISO 8601 date string or None
+    end_date: Optional[str] = None  # ISO 8601 date string or None
+    regions: Optional[list[str]] = None  # e.g. ["US", "Global"]
 
     # Human-readable reason from the AI (for debugging / audit)
     reason: Optional[str] = None

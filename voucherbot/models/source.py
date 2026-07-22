@@ -27,7 +27,9 @@ class Source(Base):
     base_url: Mapped[Optional[str]] = mapped_column(String)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     priority: Mapped[int] = mapped_column(Integer, default=1)
-    last_checked_utc: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_checked_utc: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
     error_count: Mapped[int] = mapped_column(Integer, default=0)
     next_due_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     avg_runtime_ms: Mapped[Optional[int]] = mapped_column(Integer)
@@ -35,7 +37,11 @@ class Source(Base):
     backoff_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     priority_tier: Mapped[Optional[str]] = mapped_column(String(1))
     config: Mapped[Optional[Any]] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     posts = relationship("Post", back_populates="source")

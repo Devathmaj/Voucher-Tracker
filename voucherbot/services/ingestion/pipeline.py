@@ -18,6 +18,7 @@ Stage 3 — Canonical Event Matching
 Stage 4 — Email notification
     On is_voucher for NEW / POSSIBLE_MATCH / updated posts, email settings.email_id.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -225,6 +226,7 @@ async def _process_one_source(
 
         from typing import cast
         from sqlalchemy import CursorResult
+
         if cast(CursorResult[Any], result).rowcount == 0:
             # Check if existing post is stuck from a previously failed run.
             stuck_result = await db.execute(
@@ -255,7 +257,10 @@ async def _process_one_source(
             # Distinguish by checking whether the row already existed before
             # this upsert: a pure INSERT returns the new id via inserted_primary_key,
             # a DO UPDATE returns nothing there. Use result.inserted_primary_key.
-            is_new = bool(cast(CursorResult[Any], result).inserted_primary_key and cast(CursorResult[Any], result).inserted_primary_key[0])  # type: ignore[index]
+            is_new = bool(
+                cast(CursorResult[Any], result).inserted_primary_key
+                and cast(CursorResult[Any], result).inserted_primary_key[0]
+            )  # type: ignore[index]
             if is_new:
                 stats["new_posts"] += 1
             else:
@@ -266,8 +271,7 @@ async def _process_one_source(
     pending_notifications = []
     if inserted_posts:
         batch_inputs = [
-            (post.title, _ai_content(post.content))
-            for post, _, _ in inserted_posts
+            (post.title, _ai_content(post.content)) for post, _, _ in inserted_posts
         ]
         batch_results = await analyze_post_batch(batch_inputs)
 

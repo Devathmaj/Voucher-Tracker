@@ -2,6 +2,7 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from voucherbot.main import app
 
+
 @pytest.mark.asyncio
 async def test_health_check() -> None:
     transport = ASGITransport(app=app)

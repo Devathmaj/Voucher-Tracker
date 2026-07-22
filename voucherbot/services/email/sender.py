@@ -10,6 +10,7 @@ Usage:
         html="<p>We found a voucher for you.</p>",
     )
 """
+
 import asyncio
 import time
 import structlog
@@ -30,6 +31,7 @@ def _init() -> None:
         logger.warning("email.sender: RESEND_API_KEY not set - email will be skipped.")
         return
     import resend
+
     resend.api_key = settings.resend_api_key
     _initialized = True
     logger.info("email.sender: Resend client initialized.")
@@ -86,6 +88,7 @@ async def send_email(
 
             def _send() -> dict[str, Any]:
                 from typing import cast
+
                 return cast(dict[str, Any], resend.Emails.send(params))
 
             result = await asyncio.to_thread(_send)
@@ -94,5 +97,7 @@ async def send_email(
         return result
 
     except Exception as exc:
-        logger.error("email.sender: failed to send", to=to, subject=subject, error=str(exc))
+        logger.error(
+            "email.sender: failed to send", to=to, subject=subject, error=str(exc)
+        )
         return None

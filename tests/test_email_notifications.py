@@ -1,4 +1,5 @@
 """Unit tests for voucher email notification content."""
+
 from types import SimpleNamespace
 
 from voucherbot.services.ai.schema import ExtractedEvent

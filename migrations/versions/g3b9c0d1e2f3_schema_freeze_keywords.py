@@ -8,6 +8,7 @@ Frozen baseline for production. Captures the ``keywords`` table that previously
 existed only via ``create_all``, so ``alembic upgrade head`` fully reproduces
 the schema without relying on ORM create_all.
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -31,7 +32,9 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("keyword", sa.String(), nullable=False),
         sa.Column("score", sa.Integer(), nullable=False, server_default="1"),
-        sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+        sa.Column(
+            "enabled", sa.Boolean(), nullable=False, server_default=sa.text("true")
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_keywords_keyword", "keywords", ["keyword"], unique=True)

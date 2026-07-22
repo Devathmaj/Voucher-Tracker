@@ -9,6 +9,7 @@ Post model.
 Posts are NEVER merged.  Provenance is preserved through the 1-to-many
 relationship between Event and Post.
 """
+
 import enum
 from datetime import datetime
 from typing import Any, Optional
@@ -28,10 +29,13 @@ class EventStatus(enum.Enum):
 
 class MatchConfidence(enum.Enum):
     """How an event was created or last updated."""
-    EXACT = "EXACT"          # deterministic doc dedup (same URL / content_hash)
-    AUTO_MERGED = "AUTO_MERGED"    # score >= auto_merge_threshold
-    POSSIBLE_MATCH = "POSSIBLE_MATCH"  # score in [possible_match_threshold, auto_merge_threshold)
-    NEW = "NEW"              # score below possible_match_threshold → new event
+
+    EXACT = "EXACT"  # deterministic doc dedup (same URL / content_hash)
+    AUTO_MERGED = "AUTO_MERGED"  # score >= auto_merge_threshold
+    POSSIBLE_MATCH = (
+        "POSSIBLE_MATCH"  # score in [possible_match_threshold, auto_merge_threshold)
+    )
+    NEW = "NEW"  # score below possible_match_threshold → new event
 
 
 class Event(Base):
@@ -45,12 +49,22 @@ class Event(Base):
     vendor: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     promotion_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     promotion_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    certifications: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)  # list[str]
-    voucher_code: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    certifications: Mapped[Optional[Any]] = mapped_column(
+        JSONB, nullable=True
+    )  # list[str]
+    voucher_code: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, index=True
+    )
     discount: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    registration_url: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
-    start_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    end_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    registration_url: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, index=True
+    )
+    start_date: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    end_date: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     regions: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)  # list[str]
 
     # --- Lifecycle ---

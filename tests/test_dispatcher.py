@@ -1,4 +1,5 @@
 """Tests for DB-driven scheduler dispatcher logic."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -226,7 +227,9 @@ async def test_mark_failure_applies_backoff() -> None:
 async def test_pick_due_source_skips_reddit_when_disabled(monkeypatch) -> None:
     from voucherbot.services.dispatcher import _pick_due_source
 
-    monkeypatch.setattr("voucherbot.services.dispatcher.settings.reddit_ingestion_enabled", False)
+    monkeypatch.setattr(
+        "voucherbot.services.dispatcher.settings.reddit_ingestion_enabled", False
+    )
 
     session = AsyncMock()
     mock_result = MagicMock()

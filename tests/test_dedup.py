@@ -7,6 +7,7 @@ Covers:
   - content_hash: stability, determinism, case insensitivity.
   - deduplicate_batch: intra-batch duplicate removal.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -24,6 +25,7 @@ from voucherbot.services.ingestion.dedup import (
 # ---------------------------------------------------------------------------
 # normalise_url
 # ---------------------------------------------------------------------------
+
 
 class TestNormaliseUrl:
     def test_strips_utm_params(self):
@@ -71,6 +73,7 @@ class TestNormaliseUrl:
 # content_hash
 # ---------------------------------------------------------------------------
 
+
 class TestContentHash:
     def test_is_40_chars(self):
         h = content_hash("Test Title", "https://example.com")
@@ -106,6 +109,7 @@ class TestContentHash:
 # deduplicate_batch
 # ---------------------------------------------------------------------------
 
+
 def _make_post(title: str, url: str, external_id: str = "x") -> NormalizedPost:
     return NormalizedPost(external_id=external_id, url=url, title=title)
 
@@ -123,7 +127,9 @@ class TestDeduplicateBatch:
     def test_removes_utm_duplicates(self):
         posts = [
             _make_post("Azure Promo", "https://azure.com/promo", "a"),
-            _make_post("Azure Promo", "https://azure.com/promo?utm_source=twitter", "b"),
+            _make_post(
+                "Azure Promo", "https://azure.com/promo?utm_source=twitter", "b"
+            ),
         ]
         result = deduplicate_batch(posts)
         assert len(result) == 1

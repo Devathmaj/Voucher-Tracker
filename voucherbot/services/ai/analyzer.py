@@ -17,6 +17,7 @@ Each adapter is responsible for converting its raw provider response into an
 Retry logic on 429 rate-limit errors is preserved from the original
 implementation.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -174,8 +175,12 @@ async def _wait_for_groq_budget(estimated_tokens: int, model: str) -> int:
             raise RuntimeError(f"daily_limit:{model}")
         if state.day_tokens + estimated_tokens > tpd or state.day_requests >= rpd:
             state.daily_exhausted = True
-            logger.warning("ai.analyzer: daily limit reached", model=model,
-                           day_tokens=state.day_tokens, day_requests=state.day_requests)
+            logger.warning(
+                "ai.analyzer: daily limit reached",
+                model=model,
+                day_tokens=state.day_tokens,
+                day_requests=state.day_requests,
+            )
             raise RuntimeError(f"daily_limit:{model}")
 
         while True:
@@ -185,7 +190,9 @@ async def _wait_for_groq_budget(estimated_tokens: int, model: str) -> int:
                 state.request_times.popleft()
             while state.token_times and state.token_times[0][0] <= cutoff:
                 state.token_times.popleft()
-            stale = [rid for rid, (ts, _) in state.reservations.items() if now - ts > 120]
+            stale = [
+                rid for rid, (ts, _) in state.reservations.items() if now - ts > 120
+            ]
             for rid in stale:
                 state.reservations.pop(rid, None)
 
@@ -220,7 +227,9 @@ async def _wait_for_groq_budget(estimated_tokens: int, model: str) -> int:
             await asyncio.sleep(wait_seconds)
 
 
-async def _settle_groq_budget(reservation_id: int, actual_tokens: int, model: str) -> None:
+async def _settle_groq_budget(
+    reservation_id: int, actual_tokens: int, model: str
+) -> None:
     """Replace reservation with actual token count and update daily counters."""
     state = _get_model_state(model)
     tpd = _GROQ_MODEL_TPD.get(model, 500_000)
@@ -233,8 +242,12 @@ async def _settle_groq_budget(reservation_id: int, actual_tokens: int, model: st
             state.day_requests += 1
             if state.day_tokens >= tpd or state.day_requests >= rpd:
                 state.daily_exhausted = True
-                logger.warning("ai.analyzer: daily limit reached after settle", model=model,
-                               day_tokens=state.day_tokens, day_requests=state.day_requests)
+                logger.warning(
+                    "ai.analyzer: daily limit reached after settle",
+                    model=model,
+                    day_tokens=state.day_tokens,
+                    day_requests=state.day_requests,
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +288,9 @@ def _parse_to_extracted_event(raw_text: str) -> ExtractedEvent | None:
 # ---------------------------------------------------------------------------
 # Provider adapters
 # ---------------------------------------------------------------------------
-async def _call_groq_model(title: str, content: str | None, model: str) -> ExtractedEvent | None:
+async def _call_groq_model(
+    title: str, content: str | None, model: str
+) -> ExtractedEvent | None:
     """Call a specific Groq model. Returns None on daily limit or non-retryable failure."""
     if not is_model_available(model):
         logger.info("ai.analyzer: model daily limit exhausted, skipping", model=model)
@@ -326,7 +341,9 @@ async def _call_groq_model(title: str, content: str | None, model: str) -> Extra
                 # Check if it's a daily (RPD/TPD) 429 vs per-minute
                 if "day" in error_str.lower() or "daily" in error_str.lower():
                     state.daily_exhausted = True
-                    logger.warning("ai.analyzer: daily limit confirmed by API", model=model)
+                    logger.warning(
+                        "ai.analyzer: daily limit confirmed by API", model=model
+                    )
                     return None
                 if attempt < _MAX_RETRIES:
                     wait = _parse_retry_delay(error_str)
@@ -365,10 +382,13 @@ async def _call_gemini(title: str, content: str | None) -> ExtractedEvent | None
     from google import genai  # lazy import
 
     client = genai.Client(api_key=settings.gemini_api_key)
-    full_prompt = _SYSTEM_PROMPT + f"Title: {title}\n\nContent: {content or '(no content)'}"
+    full_prompt = (
+        _SYSTEM_PROMPT + f"Title: {title}\n\nContent: {content or '(no content)'}"
+    )
 
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
+
             def _call() -> str:
                 resp = client.models.generate_content(
                     model="gemini-2.5-flash",
@@ -440,12 +460,16 @@ async def analyze_post_batch(
 
     available = [m for m in _GROQ_BATCH_MODELS if is_model_available(m)]
     if not available:
-        logger.warning("ai.analyzer: all Groq models daily-exhausted, falling back to Gemini")
+        logger.warning(
+            "ai.analyzer: all Groq models daily-exhausted, falling back to Gemini"
+        )
         return [await _call_gemini(t, c) for t, c in posts]
 
     n = len(available)
 
-    async def _call_one(idx: int, title: str, content: str | None) -> tuple[int, ExtractedEvent | None]:
+    async def _call_one(
+        idx: int, title: str, content: str | None
+    ) -> tuple[int, ExtractedEvent | None]:
         async with _GLOBAL_AI_SEMAPHORE:
             for attempt_offset in range(n):
                 model = available[(idx + attempt_offset) % n]

@@ -8,6 +8,7 @@ identity_hash(url)                    -> str   (SHA-256 hex, stable page identit
 content_hash(title, content, date)    -> str   (SHA-256 hex, changes when content changes)
 deduplicate_batch(posts)              -> list[NormalizedPost]
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -22,12 +23,27 @@ from voucherbot.providers.base import NormalizedPost
 _TRACKING_PARAMS: frozenset[str] = frozenset(
     {
         # UTM family
-        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-        "utm_id", "utm_reader", "utm_name",
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content",
+        "utm_id",
+        "utm_reader",
+        "utm_name",
         # Referral / tracking
-        "ref", "referrer", "ref_src", "ref_url",
-        "fbclid", "gclid", "gad_source", "msclkid", "twclid",
-        "ocid", "cid", "icid",
+        "ref",
+        "referrer",
+        "ref_src",
+        "ref_url",
+        "fbclid",
+        "gclid",
+        "gad_source",
+        "msclkid",
+        "twclid",
+        "ocid",
+        "cid",
+        "icid",
         # Reddit / social
         "share_id",
         # Microsoft / Bing

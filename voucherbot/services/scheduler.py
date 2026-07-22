@@ -5,6 +5,7 @@ not concurrent — keeps CPU flat under 0.1 vCPU). After the sweep the loop
 sleeps until the earliest next_due_at across all enabled sources, capped at
 MAX_SLEEP_SECONDS so the process stays responsive to newly-added sources.
 """
+
 from __future__ import annotations
 
 import asyncio

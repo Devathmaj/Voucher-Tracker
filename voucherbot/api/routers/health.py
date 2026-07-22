@@ -5,12 +5,16 @@ from voucherbot.database.connection import get_session
 
 router = APIRouter(tags=["health"])
 
+
 @router.get("/health")
 async def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
+
 @router.get("/ready")
-async def readiness_check(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
+async def readiness_check(
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
     try:
         await session.execute(text("SELECT 1"))
         return {"status": "ok"}

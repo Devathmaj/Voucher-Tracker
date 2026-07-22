@@ -107,7 +107,9 @@ def _parse_json_date(value: Any) -> datetime | None:
 class RssCollector(BaseCollector):
     """Collects items from an RSS/Atom feed (preferred over HTML scraping)."""
 
-    async def collect(self, source_config: dict[str, Any], limit: int = 50) -> list[NormalizedPost]:
+    async def collect(
+        self, source_config: dict[str, Any], limit: int = 50
+    ) -> list[NormalizedPost]:
         if source_config.get("unsupported"):
             logger.info(
                 "RssCollector: source marked unsupported",
@@ -136,8 +138,10 @@ class RssCollector(BaseCollector):
                 feed_url=feed_url,
                 error=str(e)[:160],
             )
+
             def _fetch() -> bytes:
                 import urllib.request
+
                 req = urllib.request.Request(
                     feed_url, headers=default_headers(accept=_FEED_ACCEPT)
                 )
@@ -177,6 +181,7 @@ class RssCollector(BaseCollector):
                 feed_url=feed_url,
             )
             try:
+
                 def _recover() -> str:
                     parser = etree.XMLParser(recover=True)
                     root = etree.fromstring(content, parser)
@@ -212,8 +217,12 @@ class RssCollector(BaseCollector):
             if not content_text and url:
                 try:
                     article_resp = await polite_get(url, timeout=10.0)
+
                     def _extract_text() -> str:
-                        return BeautifulSoup(article_resp.text, "lxml").get_text(separator=" ", strip=True)
+                        return BeautifulSoup(article_resp.text, "lxml").get_text(
+                            separator=" ", strip=True
+                        )
+
                     article_text = await asyncio.to_thread(_extract_text)
                     content_text = article_text[:2000] or None
                 except Exception:
@@ -251,7 +260,9 @@ class RssCollector(BaseCollector):
             return []
 
         feed_url = source_config.get("feed_url", "")
-        items = payload.get("items") or payload.get("articles") or payload.get("data") or []
+        items = (
+            payload.get("items") or payload.get("articles") or payload.get("data") or []
+        )
         if not isinstance(items, list):
             return []
 
@@ -261,9 +272,16 @@ class RssCollector(BaseCollector):
                 continue
 
             url = item.get("url") or item.get("link") or item.get("canonicalUrl") or ""
-            title = item.get("title") or item.get("headline") or item.get("name") or "(no title)"
+            title = (
+                item.get("title")
+                or item.get("headline")
+                or item.get("name")
+                or "(no title)"
+            )
             external_id = str(
-                item.get("id") or item.get("guid") or hashlib.sha1(url.encode()).hexdigest()
+                item.get("id")
+                or item.get("guid")
+                or hashlib.sha1(url.encode()).hexdigest()
             )
             # _clean_html is synchronous but cheap for JSON feed snippets;
             # full async offload happens in the RSS path via _clean_html_async.

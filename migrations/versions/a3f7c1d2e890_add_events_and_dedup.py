@@ -17,6 +17,7 @@ Changes
 
 Downgrade removes all of the above in reverse order.
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -38,7 +39,9 @@ def upgrade() -> None:
         sa.Column("vendor", sa.String(), nullable=True),
         sa.Column("promotion_name", sa.String(), nullable=True),
         sa.Column("promotion_type", sa.String(), nullable=True),
-        sa.Column("certifications", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "certifications", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
         sa.Column("voucher_code", sa.String(), nullable=True),
         sa.Column("discount", sa.String(), nullable=True),
         sa.Column("registration_url", sa.String(), nullable=True),
@@ -69,7 +72,9 @@ def upgrade() -> None:
     op.create_index("ix_events_status", "events", ["status"], unique=False)
     op.create_index("ix_events_vendor", "events", ["vendor"], unique=False)
     op.create_index("ix_events_voucher_code", "events", ["voucher_code"], unique=False)
-    op.create_index("ix_events_registration_url", "events", ["registration_url"], unique=False)
+    op.create_index(
+        "ix_events_registration_url", "events", ["registration_url"], unique=False
+    )
 
     # 3. Add content_hash to posts (nullable — existing rows remain valid)
     op.add_column("posts", sa.Column("content_hash", sa.String(40), nullable=True))

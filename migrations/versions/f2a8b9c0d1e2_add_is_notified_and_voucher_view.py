@@ -10,6 +10,7 @@ Changes
 2. Backfill: rows with status NOTIFIED → is_notified=true, status=PROCESSED.
 3. Create ``voucher_posts`` view: AI-confirmed vouchers only.
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa

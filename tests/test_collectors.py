@@ -1,4 +1,5 @@
 """Unit tests for collectors — patch polite_get to avoid live network / robots."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -47,7 +48,9 @@ SAMPLE_HTML = """<!doctype html><html><body>
 </body></html>"""
 
 
-def _mock_response(url: str, *, content: bytes | None = None, text: str | None = None) -> httpx.Response:
+def _mock_response(
+    url: str, *, content: bytes | None = None, text: str | None = None
+) -> httpx.Response:
     request = httpx.Request("GET", url)
     return httpx.Response(200, request=request, content=content, text=text)
 
@@ -158,7 +161,9 @@ async def test_rss_collector_parses_xml_feed() -> None:
         "voucherbot.providers.rss.collector.polite_get",
         new=AsyncMock(return_value=response),
     ):
-        posts = await collector.collect({"feed_url": "https://example.com/feed.xml"}, limit=5)
+        posts = await collector.collect(
+            {"feed_url": "https://example.com/feed.xml"}, limit=5
+        )
 
     assert len(posts) == 1
     assert posts[0].title == "Free exam voucher announcement"
@@ -207,7 +212,9 @@ async def test_rss_collector_rejects_html_response() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("source_name", MODIFIED_SOURCES)
-async def test_modified_rss_sources_use_headers_or_are_unsupported(source_name: str) -> None:
+async def test_modified_rss_sources_use_headers_or_are_unsupported(
+    source_name: str,
+) -> None:
     source = _source_by_name(source_name)
     config = source["config"]
 
@@ -233,7 +240,9 @@ async def test_modified_rss_sources_use_headers_or_are_unsupported(source_name: 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("source_name", MODIFIED_SOURCES)
-async def test_modified_website_sources_scrape_or_are_unsupported(source_name: str) -> None:
+async def test_modified_website_sources_scrape_or_are_unsupported(
+    source_name: str,
+) -> None:
     source = _source_by_name(source_name)
     config = source["config"]
 

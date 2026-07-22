@@ -2,6 +2,7 @@
 
 Runs sequentially to respect per-host scrape politeness (robots / crawl delay).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -67,7 +68,9 @@ async def main() -> int:
 
     ok = [result for result in results if result["status"] == "ok"]
     unsupported = [result for result in results if result["status"] == "unsupported"]
-    bad = [result for result in results if result["status"] not in {"ok", "unsupported"}]
+    bad = [
+        result for result in results if result["status"] not in {"ok", "unsupported"}
+    ]
 
     print(f"OK: {len(ok)} / {len(results)}")
     print(f"Unsupported: {len(unsupported)}")

@@ -11,6 +11,7 @@ Coverage:
   - _dates_overlap: various overlap/non-overlap scenarios.
   - Overall confidence band assignment.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -34,6 +35,7 @@ from voucherbot.services.ingestion.event_matcher import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _event(**kwargs) -> Event:
     """Create an in-memory Event with sensible defaults."""
@@ -66,6 +68,7 @@ def _extracted(**kwargs) -> ExtractedEvent:
 # _score_candidate
 # ---------------------------------------------------------------------------
 
+
 class TestScoreCandidate:
     cfg = settings.event_matcher  # default EventMatcherConfig
 
@@ -76,7 +79,9 @@ class TestScoreCandidate:
 
     def test_registration_url_utm_ignored(self):
         e = _event(registration_url="https://learn.microsoft.com/promo")
-        x = _extracted(registration_url="https://learn.microsoft.com/promo?utm_source=tw")
+        x = _extracted(
+            registration_url="https://learn.microsoft.com/promo?utm_source=tw"
+        )
         score = _score_candidate(e, x)
         assert score >= self.cfg.weight_registration_url
 
@@ -153,26 +158,34 @@ class TestScoreCandidate:
 # _dates_overlap
 # ---------------------------------------------------------------------------
 
+
 class TestDatesOverlap:
     def _dt(self, s: str) -> datetime:
         return datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
 
     def test_overlapping_ranges(self):
-        assert _dates_overlap(self._dt("2026-08-01"), self._dt("2026-08-31"), "2026-08-15", "2026-09-15")
+        assert _dates_overlap(
+            self._dt("2026-08-01"), self._dt("2026-08-31"), "2026-08-15", "2026-09-15"
+        )
 
     def test_non_overlapping_ranges(self):
-        assert not _dates_overlap(self._dt("2026-01-01"), self._dt("2026-01-31"), "2026-03-01", "2026-03-31")
+        assert not _dates_overlap(
+            self._dt("2026-01-01"), self._dt("2026-01-31"), "2026-03-01", "2026-03-31"
+        )
 
     def test_both_none_returns_true(self):
         assert _dates_overlap(None, None, None, None)
 
     def test_one_side_none_returns_true(self):
-        assert _dates_overlap(self._dt("2026-08-01"), self._dt("2026-08-31"), None, None)
+        assert _dates_overlap(
+            self._dt("2026-08-01"), self._dt("2026-08-31"), None, None
+        )
 
 
 # ---------------------------------------------------------------------------
 # _merge_fields
 # ---------------------------------------------------------------------------
+
 
 class TestMergeFields:
     def _make_post(self) -> MagicMock:
@@ -183,7 +196,9 @@ class TestMergeFields:
     def test_backfills_null_field(self):
         e = _event(end_date=None)
         x = _extracted(end_date="2026-09-30")
-        updated = _merge_fields(e, x, SourceType.BLOG, 99, 80, MatchConfidence.AUTO_MERGED)
+        updated = _merge_fields(
+            e, x, SourceType.BLOG, 99, 80, MatchConfidence.AUTO_MERGED
+        )
         # end_date should have been set on the event
         assert "end_date" in updated
 
@@ -192,24 +207,40 @@ class TestMergeFields:
         e = _event(vendor="microsoft")
         # Simulate the event's vendor was set by a BLOG (priority 2)
         e.merge_log = [
-            {"source_type": "BLOG", "fields_updated": ["vendor"], "timestamp": "", "post_id": 1,
-             "match_score": 0, "match_confidence": "NEW"}
+            {
+                "source_type": "BLOG",
+                "fields_updated": ["vendor"],
+                "timestamp": "",
+                "post_id": 1,
+                "match_score": 0,
+                "match_confidence": "NEW",
+            }
         ]
         x = _extracted(vendor="MICROSOFT")
         # REDDIT has lower priority than BLOG
-        updated = _merge_fields(e, x, SourceType.REDDIT, 100, 50, MatchConfidence.AUTO_MERGED)
+        updated = _merge_fields(
+            e, x, SourceType.REDDIT, 100, 50, MatchConfidence.AUTO_MERGED
+        )
         assert "vendor" not in updated
 
     def test_overwrites_with_higher_priority_source(self):
         """Higher-priority source SHOULD overwrite lower-priority source."""
         e = _event(vendor="microsoft")
         e.merge_log = [
-            {"source_type": "REDDIT", "fields_updated": ["vendor"], "timestamp": "", "post_id": 1,
-             "match_score": 0, "match_confidence": "NEW"}
+            {
+                "source_type": "REDDIT",
+                "fields_updated": ["vendor"],
+                "timestamp": "",
+                "post_id": 1,
+                "match_score": 0,
+                "match_confidence": "NEW",
+            }
         ]
         x = _extracted(vendor="microsoft")
         # WEBSITE has higher priority than REDDIT
-        updated = _merge_fields(e, x, SourceType.WEBSITE, 100, 80, MatchConfidence.AUTO_MERGED)
+        updated = _merge_fields(
+            e, x, SourceType.WEBSITE, 100, 80, MatchConfidence.AUTO_MERGED
+        )
         assert "vendor" in updated
 
     def test_appends_audit_log_entry(self):
@@ -226,6 +257,7 @@ class TestMergeFields:
 # ---------------------------------------------------------------------------
 # Confidence band assignment (integration-level, no DB)
 # ---------------------------------------------------------------------------
+
 
 class TestConfidenceBands:
     """Verify score thresholds map to correct MatchConfidence values."""

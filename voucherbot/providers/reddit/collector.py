@@ -25,10 +25,14 @@ class RedditCollector(BaseCollector):
     def __init__(self, client: RedditClient) -> None:
         self.client = client
 
-    async def collect(self, source_config: dict[str, Any], limit: int = 25) -> list[NormalizedPost]:
+    async def collect(
+        self, source_config: dict[str, Any], limit: int = 25
+    ) -> list[NormalizedPost]:
         subreddit_name = source_config.get("subreddit", "")
         if not subreddit_name:
-            logger.warning("RedditCollector: no subreddit in config", config=source_config)
+            logger.warning(
+                "RedditCollector: no subreddit in config", config=source_config
+            )
             return []
 
         if not self.client.is_configured:
@@ -36,7 +40,9 @@ class RedditCollector(BaseCollector):
 
         query_terms = source_config.get("query_terms") or []
         if query_terms:
-            query = " OR ".join(f'"{term}"' if " " in term else term for term in query_terms)
+            query = " OR ".join(
+                f'"{term}"' if " " in term else term for term in query_terms
+            )
             raw_posts = await self.client.search_posts(
                 query=query,
                 subreddit_name=subreddit_name,
@@ -47,7 +53,9 @@ class RedditCollector(BaseCollector):
 
         return self._normalize_praw_posts(subreddit_name, raw_posts)
 
-    def _normalize_praw_posts(self, subreddit_name: str, raw_posts: Any) -> list[NormalizedPost]:
+    def _normalize_praw_posts(
+        self, subreddit_name: str, raw_posts: Any
+    ) -> list[NormalizedPost]:
         results: list[NormalizedPost] = []
 
         for post in raw_posts:
@@ -58,22 +66,26 @@ class RedditCollector(BaseCollector):
                 except Exception:
                     pass
 
-            results.append(NormalizedPost(
-                external_id=post.id,
-                url=f"https://www.reddit.com{post.permalink}",
-                title=post.title,
-                content=post.selftext or None,
-                summary=None,
-                author=author_name,
-                published_at=datetime.fromtimestamp(post.created_utc, tz=timezone.utc),
-                raw_data={
-                    "score": post.score,
-                    "num_comments": post.num_comments,
-                    "url": post.url,
-                    "subreddit": subreddit_name,
-                    "flair": post.link_flair_text,
-                }
-            ))
+            results.append(
+                NormalizedPost(
+                    external_id=post.id,
+                    url=f"https://www.reddit.com{post.permalink}",
+                    title=post.title,
+                    content=post.selftext or None,
+                    summary=None,
+                    author=author_name,
+                    published_at=datetime.fromtimestamp(
+                        post.created_utc, tz=timezone.utc
+                    ),
+                    raw_data={
+                        "score": post.score,
+                        "num_comments": post.num_comments,
+                        "url": post.url,
+                        "subreddit": subreddit_name,
+                        "flair": post.link_flair_text,
+                    },
+                )
+            )
 
         return results
 

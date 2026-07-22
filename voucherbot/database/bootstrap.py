@@ -4,6 +4,7 @@ Startup bootstrap for source and keyword seed data.
 The source catalog is intentionally config-driven: collectors read the JSONB
 config, so adding feeds/pages does not require a schema migration.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -128,7 +129,11 @@ def _feed(
     unsupported_reason: str | None = None,
     enabled: bool | None = None,
 ) -> dict[str, Any]:
-    interval = cadence_minutes if cadence_minutes is not None else _TIER_CADENCE_MINUTES[priority_tier]
+    interval = (
+        cadence_minutes
+        if cadence_minutes is not None
+        else _TIER_CADENCE_MINUTES[priority_tier]
+    )
     config: dict[str, Any] = {
         "feed_url": feed_url,
         "vendor": vendor,
@@ -170,7 +175,11 @@ def _page(
     unsupported_reason: str | None = None,
     enabled: bool | None = None,
 ) -> dict[str, Any]:
-    interval = cadence_minutes if cadence_minutes is not None else _TIER_CADENCE_MINUTES[priority_tier]
+    interval = (
+        cadence_minutes
+        if cadence_minutes is not None
+        else _TIER_CADENCE_MINUTES[priority_tier]
+    )
     config: dict[str, Any] = {
         "url": url,
         "vendor": vendor,
@@ -259,7 +268,6 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         SourceType.RSS,
         vendor="Linux Foundation",
     ),
-
     # Community/forum RSS feeds (Tier C).
     _feed(
         "Microsoft Learn Q&A Voucher Search",
@@ -287,7 +295,6 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         vendor="Microsoft",
         priority=2,
     ),
-
     # Aggregator blogs (Tier C).
     _feed(
         "Tutorials Dojo",
@@ -350,7 +357,6 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         SourceType.RSS,
         vendor="Cisco",
     ),
-
     # Official vendor/event pages (Tier D).
     _page(
         "Microsoft Cloud Skills Challenge",
@@ -459,7 +465,6 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
             "sets Crawl-delay 10. Use Red Hat Blog RSS only."
         ),
     ),
-
     # Aggregators without reliable known feeds (Tier C).
     _page(
         "MSFTHub Vouchers",
@@ -493,7 +498,9 @@ async def bootstrap_data() -> None:
         for kw in KEYWORDS:
             await session.execute(
                 insert(Keyword)
-                .values(keyword=str(kw["keyword"]).lower(), score=kw["score"], enabled=True)
+                .values(
+                    keyword=str(kw["keyword"]).lower(), score=kw["score"], enabled=True
+                )
                 .on_conflict_do_nothing(index_elements=["keyword"])
             )
 

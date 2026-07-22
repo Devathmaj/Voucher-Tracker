@@ -11,6 +11,7 @@ Changes
 3. Seed the ``pipeline`` lock row.
 4. Backfill ``next_due_at`` and ``priority_tier`` on existing sources.
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
