@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality checks
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: voucherbot
+          POSTGRES_PASSWORD: voucherbot
+          POSTGRES_DB: voucherbot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U voucherbot -d voucherbot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://voucherbot:voucherbot@localhost:5432/voucherbot
+      IS_PROD: "false"
+      REDDIT_INGESTION_ENABLED: "false"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Run linter
+        run: uv run ruff check --output-format=github .
+
+      - name: Run type checks
+        run: uv run mypy voucherbot tests
+
+  tests:
+    name: Test suite
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: voucherbot
+          POSTGRES_PASSWORD: voucherbot
+          POSTGRES_DB: voucherbot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U voucherbot -d voucherbot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://voucherbot:voucherbot@localhost:5432/voucherbot
+      IS_PROD: "false"
+      REDDIT_INGESTION_ENABLED: "false"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project dependencies
+        run: |
+          uv sync --all-extras --dev
+          uv pip install pytest-github-actions-annotate-failures
+
+      - name: Run test suite
+        run: uv run pytest

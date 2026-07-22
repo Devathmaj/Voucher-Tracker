@@ -47,7 +47,7 @@ class RedditCollector(BaseCollector):
 
         return self._normalize_praw_posts(subreddit_name, raw_posts)
 
-    def _normalize_praw_posts(self, subreddit_name: str, raw_posts) -> list[NormalizedPost]:
+    def _normalize_praw_posts(self, subreddit_name: str, raw_posts: Any) -> list[NormalizedPost]:
         results: list[NormalizedPost] = []
 
         for post in raw_posts:

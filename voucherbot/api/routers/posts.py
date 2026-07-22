@@ -1,3 +1,4 @@
+from typing import Any
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +19,7 @@ async def get_posts(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     stmt = (
         select(Post)
         .options(selectinload(Post.source))
@@ -39,7 +40,7 @@ async def get_posts(
     return [_serialize_post(post) for post in posts]
 
 
-def _serialize_post(post: Post) -> dict:
+def _serialize_post(post: Post) -> dict[str, Any]:
     return {
         "id": post.id,
         "source": {

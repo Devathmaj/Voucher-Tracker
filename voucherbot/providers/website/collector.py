@@ -71,7 +71,8 @@ class WebsiteCollector(BaseCollector):
             title = title_el.get_text(strip=True) if title_el else ""
             if not title:
                 title = article.get_text(separator=" ", strip=True)
-            href = link_el.get("href", "") if link_el else ""
+            raw_href = link_el.get("href", "") if link_el else ""
+            href = str(raw_href[0]) if isinstance(raw_href, list) else str(raw_href)
 
             if not title and not href:
                 continue

@@ -7,6 +7,7 @@ pipeline for that source, updates scheduling fields, and releases the lease.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import structlog
 from sqlalchemy import or_, select, text
@@ -50,7 +51,7 @@ def compute_backoff_minutes(consecutive_failures: int) -> int:
     if consecutive_failures <= 0:
         return 0
     delay = settings.source_backoff_base_minutes * (2 ** (consecutive_failures - 1))
-    return min(delay, settings.source_backoff_max_minutes)
+    return int(min(delay, settings.source_backoff_max_minutes))
 
 
 def poll_interval_minutes(source: Source) -> int:
@@ -276,7 +277,7 @@ async def dispatch_tick(
     session: AsyncSession,
     collectors: dict[str, BaseCollector],
     holder_id: str,
-) -> dict:
+) -> dict[str, Any]:
     """
     Run one scheduler tick: acquire lease, process one source, release lease.
 

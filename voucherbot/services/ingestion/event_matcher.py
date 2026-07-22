@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import difflib
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 
 import structlog
 from sqlalchemy import or_, select
@@ -219,7 +219,7 @@ def _merge_fields(
         "match_confidence": match_confidence.value,
         "fields_updated": updated_fields,
     }
-    current_log: list = event.merge_log or []
+    current_log: list[Any] = event.merge_log or []
     event.merge_log = current_log + [log_entry]
 
     return updated_fields
@@ -251,7 +251,7 @@ def _get_event_field_source_priority(event: Event, field: str) -> int:
     return len(SOURCE_PRIORITY)  # unknown → lowest priority
 
 
-def _extracted_to_event_fields(extracted: ExtractedEvent) -> dict:
+def _extracted_to_event_fields(extracted: ExtractedEvent) -> dict[str, Any]:
     """Map an ExtractedEvent to a dict of Event column values."""
     def _parse_date(s: Optional[str]) -> Optional[datetime]:
         if not s:

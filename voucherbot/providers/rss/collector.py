@@ -79,13 +79,14 @@ async def _clean_html_async(value: Any) -> str | None:
     return await asyncio.to_thread(_clean_html, value)
 
 
-def _parse_date(entry) -> datetime | None:
+def _parse_date(entry: Any) -> datetime | None:
     """Parse a date from an RSS entry, trying multiple fields."""
     for attr in ("published_parsed", "updated_parsed"):
         val = getattr(entry, attr, None)
         if val:
             try:
-                return datetime(*val[:6], tzinfo=timezone.utc)
+                dt = datetime(*val[:6])
+                return dt.replace(tzinfo=timezone.utc)
             except Exception:
                 pass
     return None
@@ -140,7 +141,7 @@ class RssCollector(BaseCollector):
                 req = urllib.request.Request(
                     feed_url, headers=default_headers(accept=_FEED_ACCEPT)
                 )
-                return urllib.request.urlopen(req, timeout=timeout).read()
+                return bytes(urllib.request.urlopen(req, timeout=timeout).read())
 
             try:
                 content = await asyncio.to_thread(_fetch)
@@ -211,9 +212,9 @@ class RssCollector(BaseCollector):
             if not content_text and url:
                 try:
                     article_resp = await polite_get(url, timeout=10.0)
-                    article_text = await asyncio.to_thread(
-                        lambda r=article_resp: BeautifulSoup(r.text, "lxml").get_text(separator=" ", strip=True)
-                    )
+                    def _extract_text() -> str:
+                        return BeautifulSoup(article_resp.text, "lxml").get_text(separator=" ", strip=True)
+                    article_text = await asyncio.to_thread(_extract_text)
                     content_text = article_text[:2000] or None
                 except Exception:
                     pass

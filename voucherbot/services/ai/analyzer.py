@@ -25,6 +25,7 @@ import json
 import re
 import time
 import structlog
+from typing import Any
 
 from voucherbot.config.settings import settings
 from voucherbot.services.ai.schema import ExtractedEvent
@@ -47,24 +48,22 @@ _SYSTEM_PROMPT = (
     "actionable promo intent.\n"
     "confidence is your belief in that intent (0.0–1.0). Do NOT require high "
     "confidence or a code to set is_voucher=true — use lower confidence instead.\n\n"
-    "Respond with ONLY a valid JSON object matching this exact schema (all fields "
-    "optional except is_voucher and confidence):\n"
+    "Respond with ONLY a valid JSON object matching this exact schema. If a field is unknown or not mentioned, use the JSON `null` literal (do not use strings like 'not mentioned'). Do NOT include comments.\n"
     "{\n"
     '  "is_voucher": true | false,\n'
     '  "confidence": 0.0–1.0,\n'
-    '  "reason": "one-sentence explanation",\n'
-    '  "vendor": "e.g. Microsoft | AWS | Google | Cisco | CompTIA | null",\n'
-    '  "promotion_name": "e.g. AI Skills Fest | null",\n'
-    '  "promotion_type": "voucher | discount | free_exam | bundle | beta_invite | null",\n'
-    '  "certifications": ["AZ-900", "SC-300"] or null,\n'
-    '  "voucher_code": "CODE or null",\n'
-    '  "discount": "50% or $100 or null",\n'
-    '  "registration_url": "https://... or null",\n'
+    '  "reason": "string",\n'
+    '  "vendor": "string or null",\n'
+    '  "promotion_name": "string or null",\n'
+    '  "promotion_type": "string or null",\n'
+    '  "certifications": ["string"] or null,\n'
+    '  "voucher_code": "string or null",\n'
+    '  "discount": "string or null",\n'
+    '  "registration_url": "string or null",\n'
     '  "start_date": "YYYY-MM-DD or null",\n'
     '  "end_date": "YYYY-MM-DD or null",\n'
-    '  "regions": ["US", "Global"] or null\n'
+    '  "regions": ["string"] or null\n'
     "}\n"
-    "No markdown fences, no extra text — ONLY the JSON object.\n\n"
 )
 
 # ---------------------------------------------------------------------------
@@ -254,7 +253,7 @@ def _parse_to_extracted_event(raw_text: str) -> ExtractedEvent | None:
             text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
             text = re.sub(r"\n?```$", "", text)
 
-        data: dict = json.loads(text)
+        data: dict[str, Any] = json.loads(text)
         event = ExtractedEvent.model_validate(data)
         logger.debug(
             "ai.analyzer: extraction complete",
@@ -310,8 +309,10 @@ async def _call_groq_model(title: str, content: str | None, model: str) -> Extra
             }
             if model.startswith("openai/gpt-oss-"):
                 params["reasoning_effort"] = "medium"
+            if "llama" in model.lower():
+                params["response_format"] = {"type": "json_object"}
 
-            resp = await client.chat.completions.create(**params)
+            resp = await client.chat.completions.create(**params)  # type: ignore[call-overload]
             actual = getattr(resp.usage, "total_tokens", None) or estimated_tokens
             await _settle_groq_budget(rid, actual, model)
             raw_text: str = resp.choices[0].message.content.strip()
@@ -373,7 +374,7 @@ async def _call_gemini(title: str, content: str | None) -> ExtractedEvent | None
                     model="gemini-2.5-flash",
                     contents=full_prompt,
                 )
-                return resp.text
+                return resp.text or ""
 
             raw_text = (await asyncio.to_thread(_call)).strip()
             return _parse_to_extracted_event(raw_text)

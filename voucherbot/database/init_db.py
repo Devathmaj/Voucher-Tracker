@@ -1,5 +1,6 @@
 from voucherbot.database.connection import engine
 from voucherbot.models.base import Base
+from sqlalchemy import Connection
 
 import voucherbot.models.source  # noqa: F401
 import voucherbot.models.post  # noqa: F401 — Post only; VoucherPost is a view
@@ -9,7 +10,7 @@ import voucherbot.models.pipeline_lock  # noqa: F401
 
 
 async def init_db() -> None:
-    def _create_all(sync_conn) -> None:
+    def _create_all(sync_conn: Connection) -> None:
         tables = [
             table
             for table in Base.metadata.sorted_tables

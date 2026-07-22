@@ -13,7 +13,7 @@ Usage:
 import asyncio
 import time
 import structlog
-from typing import Optional
+from typing import Optional, Any
 
 from voucherbot.config.settings import settings
 
@@ -43,7 +43,7 @@ async def send_email(
     subject: str,
     html: str,
     text: Optional[str] = None,
-) -> dict | None:
+) -> dict[str, Any] | None:
     """
     Send an email via Resend.
 
@@ -84,8 +84,9 @@ async def send_email(
                 )
                 await asyncio.sleep(delay)
 
-            def _send() -> dict:
-                return resend.Emails.send(params)
+            def _send() -> dict[str, Any]:
+                from typing import cast
+                return cast(dict[str, Any], resend.Emails.send(params))
 
             result = await asyncio.to_thread(_send)
             _last_send_at = time.monotonic()

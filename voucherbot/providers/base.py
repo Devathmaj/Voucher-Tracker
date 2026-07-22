@@ -14,7 +14,7 @@ class NormalizedPost:
     summary: Optional[str] = None
     author: Optional[str] = None
     published_at: Optional[datetime] = None
-    raw_data: Optional[dict] = field(default_factory=dict)
+    raw_data: Optional[dict[str, Any]] = field(default_factory=dict)
 
 
 class BaseCollector(ABC):

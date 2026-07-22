@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 import structlog
 from sqlalchemy import select
@@ -86,7 +87,7 @@ async def run_pipeline_for_source(
     source: Source,
     collectors: dict[str, BaseCollector],
     fetch_limit: int | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Run the full ingestion pipeline for a single source."""
     sync_id = f"Sync-{str(uuid.uuid4())[:8]}"
     start_time = datetime.now(timezone.utc)
@@ -98,7 +99,7 @@ async def run_pipeline_for_source(
         return {"errors": 1}
 
     kw_result = await db.execute(select(Keyword).where(Keyword.enabled == True))  # noqa: E712
-    keywords: list[Keyword] = kw_result.scalars().all()
+    keywords: list[Keyword] = list(kw_result.scalars().all())
 
     stats = await _process_one_source(db, source, collector, keywords, limit)
 
@@ -117,7 +118,7 @@ async def _process_one_source(
     collector: BaseCollector,
     keywords: list[Keyword],
     fetch_limit: int,
-) -> dict:
+) -> dict[str, Any]:
     stats = {
         "fetched": 0,
         "keyword_filtered": 0,
@@ -222,7 +223,9 @@ async def _process_one_source(
             stats["unchanged"] += 1
             continue
 
-        if result.rowcount == 0:
+        from typing import cast
+        from sqlalchemy import CursorResult
+        if cast(CursorResult[Any], result).rowcount == 0:
             # Check if existing post is stuck from a previously failed run.
             stuck_result = await db.execute(
                 select(Post).where(
@@ -252,7 +255,7 @@ async def _process_one_source(
             # Distinguish by checking whether the row already existed before
             # this upsert: a pure INSERT returns the new id via inserted_primary_key,
             # a DO UPDATE returns nothing there. Use result.inserted_primary_key.
-            is_new = bool(result.inserted_primary_key and result.inserted_primary_key[0])
+            is_new = bool(cast(CursorResult[Any], result).inserted_primary_key and cast(CursorResult[Any], result).inserted_primary_key[0])  # type: ignore[index]
             if is_new:
                 stats["new_posts"] += 1
             else:

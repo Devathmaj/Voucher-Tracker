@@ -3,6 +3,7 @@ import asyncpraw
 from asyncpraw.models import Subreddit
 from asyncprawcore.exceptions import RequestException, ResponseException
 import structlog
+from typing import Any
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 
 from voucherbot.config.settings import settings
@@ -24,6 +25,8 @@ class RedditClient:
         self.subreddit_cache: dict[str, Subreddit] = {}
         
     async def get_subreddit(self, name: str) -> Subreddit:
+        if not self.reddit:
+            raise RuntimeError("Reddit client is not configured")
         if name not in self.subreddit_cache:
             self.subreddit_cache[name] = await self.reddit.subreddit(name)
         return self.subreddit_cache[name]
@@ -34,7 +37,7 @@ class RedditClient:
         retry=retry_if_exception_type((RequestException, ResponseException)),
         reraise=True
     )
-    async def fetch_new_posts(self, subreddit_name: str, limit: int = 25):
+    async def fetch_new_posts(self, subreddit_name: str, limit: int = 25) -> list[Any]:
         """Fetch new posts from a subreddit."""
         sub = await self.get_subreddit(subreddit_name)
         posts = []
@@ -52,8 +55,10 @@ class RedditClient:
         retry=retry_if_exception_type((RequestException, ResponseException)),
         reraise=True
     )
-    async def fetch_post_comments(self, post_id: str, limit: int = 10):
+    async def fetch_post_comments(self, post_id: str, limit: int = 10) -> Any:
         """Fetch comments for a specific post."""
+        if not self.reddit:
+            raise RuntimeError("Reddit client is not configured")
         try:
             submission = await self.reddit.submission(id=post_id)
             submission.comment_limit = limit
@@ -63,7 +68,7 @@ class RedditClient:
             logger.error(f"Error fetching comments for post {post_id}", error=str(e))
             raise
 
-    async def search_posts(self, query: str, subreddit_name: str = "all", limit: int = 25):
+    async def search_posts(self, query: str, subreddit_name: str = "all", limit: int = 25) -> list[Any]:
         """Search posts."""
         sub = await self.get_subreddit(subreddit_name)
         posts = []

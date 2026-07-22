@@ -8,6 +8,7 @@ MAX_SLEEP_SECONDS so the process stays responsive to newly-added sources.
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 import uuid
 from datetime import datetime, timezone
 
@@ -31,7 +32,7 @@ _collectors = {
     "web": WebsiteCollector(),
 }
 
-_loop_task: asyncio.Task | None = None
+_loop_task: asyncio.Task[Any] | None = None
 
 # Hard ceiling on how long we sleep between sweeps (6 hours).
 # Prevents the loop from sleeping forever if all sources have distant due times.

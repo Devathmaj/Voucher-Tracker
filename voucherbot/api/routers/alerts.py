@@ -1,3 +1,4 @@
+from typing import Any
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +18,7 @@ async def get_alerts(
         description="Filter by is_notified; omit for all vouchers",
     ),
     session: AsyncSession = Depends(get_session),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return AI-confirmed vouchers from the ``voucher_posts`` view."""
     stmt = select(VoucherPost).where(VoucherPost.score >= min_score)
     if notified is not None:

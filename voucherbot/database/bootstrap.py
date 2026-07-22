@@ -493,7 +493,7 @@ async def bootstrap_data() -> None:
         for kw in KEYWORDS:
             await session.execute(
                 insert(Keyword)
-                .values(keyword=kw["keyword"].lower(), score=kw["score"], enabled=True)
+                .values(keyword=str(kw["keyword"]).lower(), score=kw["score"], enabled=True)
                 .on_conflict_do_nothing(index_elements=["keyword"])
             )
 

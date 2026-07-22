@@ -1,3 +1,4 @@
+from typing import Any
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,7 @@ async def get_sources(
     source_type: SourceType | None = Query(default=None),
     enabled: bool | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     stmt = select(Source).order_by(Source.priority.desc(), Source.name)
     if source_type is not None:
         stmt = stmt.where(Source.type == source_type)

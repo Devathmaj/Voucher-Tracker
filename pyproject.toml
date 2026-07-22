@@ -42,5 +42,14 @@ target-version = "py311"
 python_version = "3.11"
 strict = true
 
+[[tool.mypy.overrides]]
+module = "feedparser.*"
+ignore_missing_imports = true
+
 [tool.setuptools.packages.find]
 include = ["voucherbot*"]
+
+[dependency-groups]
+dev = [
+    "lxml-stubs>=0.5.1",
+]
