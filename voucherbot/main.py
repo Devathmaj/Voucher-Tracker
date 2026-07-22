@@ -10,6 +10,7 @@ from voucherbot.config.settings import settings
 from voucherbot.core.logging import setup_logging
 from voucherbot.database.connection import AsyncSessionLocal
 from voucherbot.models.source import Source
+from voucherbot.services.dispatcher import reset_lease
 from voucherbot.services.scheduler import start_scheduler, stop_scheduler
 
 logger = structlog.get_logger()
@@ -33,6 +34,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await session.execute(update(Source).values(next_due_at=None, backoff_until=None))
         await session.commit()
     await logger.ainfo("scheduler: all sources reset to due")
+
+    async with AsyncSessionLocal() as session:
+        await reset_lease(session)
+    await logger.ainfo("dispatcher: lease reset on startup")
 
     start_scheduler()
     yield

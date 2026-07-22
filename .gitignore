@@ -54,6 +54,7 @@ Desktop.ini
 
 # Python version manager
 .python-version
+uv.lock
 
 # Documentation
 docs/_build/

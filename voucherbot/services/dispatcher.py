@@ -127,6 +127,23 @@ async def _release_lease(session: AsyncSession) -> None:
     await session.commit()
 
 
+async def reset_lease(session: AsyncSession) -> None:
+    """Clear any leftover lease state so a fresh app start can run immediately."""
+    await session.execute(
+        text(
+            """
+            UPDATE pipeline_lock
+            SET holder = NULL,
+                acquired_at = NULL,
+                expires_at = NULL
+            WHERE name = :lock_name
+            """
+        ),
+        {"lock_name": LOCK_NAME},
+    )
+    await session.commit()
+
+
 async def _pick_due_source(session: AsyncSession) -> Source | None:
     now = datetime.now(timezone.utc)
     filters = [
