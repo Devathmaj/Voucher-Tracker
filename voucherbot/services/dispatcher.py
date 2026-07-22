@@ -20,6 +20,7 @@ from voucherbot.services.ingestion.pipeline import run_pipeline_for_source
 logger = structlog.get_logger(__name__)
 
 LOCK_NAME = "pipeline"
+PROCESS_BOOT_AT = datetime.now(timezone.utc)
 
 # Default poll intervals (minutes) when config lacks poll_interval_minutes.
 _TIER_DEFAULT_MINUTES = {
@@ -94,7 +95,11 @@ async def _acquire_lease(session: AsyncSession, holder_id: str) -> bool:
                 acquired_at = :now,
                 expires_at = :expires_at
             WHERE name = :lock_name
-              AND (holder IS NULL OR expires_at < :now)
+                            AND (
+                                        holder IS NULL
+                                 OR expires_at < :now
+                                 OR acquired_at < :boot_at
+                            )
             RETURNING name
             """
         ),
@@ -102,6 +107,7 @@ async def _acquire_lease(session: AsyncSession, holder_id: str) -> bool:
             "holder_id": holder_id,
             "now": now,
             "expires_at": expires_at,
+                        "boot_at": PROCESS_BOOT_AT,
             "lock_name": LOCK_NAME,
         },
     )
