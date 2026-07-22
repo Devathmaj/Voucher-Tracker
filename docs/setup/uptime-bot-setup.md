@@ -68,6 +68,14 @@ Once you're signed in, UptimeRobot will start the onboarding process with **Crea
 > 🔗 **Where do I find my app's URL?**
 > Your Render app URL was provided after deployment. If you haven't saved it, refer back to **Step 12** of the [Render Deployment Guide](render-setup.md), where you copied and saved your app URL from the Render dashboard.
 
+> 💡 **Tip — Use the `/health` endpoint for reliable status checks**
+>
+> The app exposes a `/health` endpoint, append it to the end of your URL when setting up the monitor. For example:
+>
+> `https://your-service.onrender.com/health`
+>
+> This ensures UptimeRobot always receives a proper response and can correctly report your service as up. If you use the `/health` endpoint, you can skip the notification and email configuration steps later in this guide — your monitor will work correctly out of the box.
+
 ![Create Monitor](../images/uptime_3.png)
 
 ---
@@ -134,6 +142,8 @@ You'll now see the monitor info page. From here, locate and click the **Edit** b
 >
 > If you leave email notifications enabled, you will receive a constant flood of failure alert emails. **It is strongly recommended to disable email notifications.**
 
+> 💡 **Using the `/health` endpoint?** If you entered your URL with `/health` appended back in Step 3, your monitor should already be passing status checks correctly — you don't need to disable email notifications.
+
 In the edit panel, find the **Alert Contacts** section and **uncheck the E-mail checkbox** to disable email notifications.
 
 > 📸 **Note:** In the screenshot below, the **E-mail** checkbox is still checked — this was left on by mistake when the screenshot was taken. Make sure you **uncheck it** before saving.
@@ -174,6 +184,14 @@ In the **Website to Monitor** field, enter the URL of your deployed Render app.
 
 > 🔗 **Where do I find my app's URL?**
 > Refer back to **Step 12** of the [Render Deployment Guide](render-setup.md), where you copied and saved your app URL from the Render dashboard.
+
+> 💡 **Tip — Use the `/health` endpoint for reliable status checks**
+>
+> If your app exposes a `/health` endpoint, consider appending it to your URL before submitting. For example:
+>
+> `https://your-service.onrender.com/health`
+>
+> This ensures UptimeRobot always gets a proper response and reports your service as up, without needing any further configuration.
 
 After entering the URL, either create a new account or sign in via Google — whichever you prefer.
 
