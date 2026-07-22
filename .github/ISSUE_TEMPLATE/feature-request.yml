@@ -1,0 +1,79 @@
+name: Feature Request
+description: Suggest a new feature or improvement for VoucherBot
+title: "[FEAT] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting, please check existing issues and discussions to avoid duplicates. Consider opening a GitHub Discussion first if the idea needs alignment before work begins.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve? Why is it needed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the feature you'd like. Be as specific as you can.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: area
+    attributes:
+      label: Affected Area
+      description: Check all that apply.
+      options:
+        - label: Scheduler / Dispatcher
+        - label: HTTP Policy Layer (`http_policy.py`)
+        - label: RSS Collector
+        - label: Website Collector
+        - label: Reddit Integration
+        - label: AI Layer (Groq / Gemini)
+        - label: Email Notifications
+        - label: Database / Migrations
+        - label: API / Routers
+        - label: Configuration / Settings
+
+  - type: checkboxes
+    id: policy_sensitive
+    attributes:
+      label: Policy-Sensitive Files
+      description: Check if your proposal touches any of the files below.
+      options:
+        - label: This feature touches `http_policy.py`, `reddit/client.py`, `reddit/collector.py`, or `scheduler.py`
+
+  - type: checkboxes
+    id: policy_checklist
+    attributes:
+      label: Policy Checklist
+      description: If you checked the box above, confirm all of the following. See [CONTRIBUTING.md](../CONTRIBUTING.md) for full details.
+      options:
+        - label: "`robots.txt` compliance is preserved."
+        - label: "No default crawl delays are reduced."
+        - label: "Reddit rate limits and the Responsible Builder Policy are respected."
+        - label: "`REDDIT_INGESTION_ENABLED=false` still results in a clean no-op."
+
+  - type: textarea
+    id: policy_explanation
+    attributes:
+      label: Policy Explanation
+      description: If your proposal touches policy-sensitive files, briefly explain how the ethical and legal obligations in CONTRIBUTING.md are preserved.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative approaches? Why did you prefer this one?
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional Notes
+      description: Mockups, references, prior art, or anything else that might help.

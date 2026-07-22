@@ -9,6 +9,7 @@ from lxml import etree
 import feedparser
 import hashlib
 from bs4 import BeautifulSoup
+from urllib.parse import urlparse
 
 from voucherbot.providers.base import BaseCollector, NormalizedPost
 from voucherbot.providers.http_policy import (
@@ -47,17 +48,16 @@ def _normalize_feed_url(feed_url: str) -> str:
     if _GOOGLE_CLOUD_BLOG_RE.match(feed_url):
         return "https://cloudblog.withgoogle.com/rss/"
 
+    parsed = urlparse(feed_url)
     if (
-        "techcommunity.microsoft.com" in feed_url
-        and "/rss" in feed_url
-        and "/t5/s/" not in feed_url
-        and "gxcuf89792" in feed_url
+        parsed.hostname == "techcommunity.microsoft.com"
+        and parsed.path.endswith("/rss")
+        and not parsed.path.startswith("/t5/s/")
+        and parsed.path.startswith("/t5/")
+        and "gxcuf89792" in parsed.path
     ):
-        return feed_url.replace(
-            "techcommunity.microsoft.com/",
-            "techcommunity.microsoft.com/t5/s/",
-            1,
-        )
+        rewritten_path = parsed.path.replace("/t5/", "/t5/s/", 1)
+        return parsed._replace(path=rewritten_path).geturl()
 
     return feed_url
 

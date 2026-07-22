@@ -1,0 +1,90 @@
+name: Question / Help
+description: Ask a question or get help with setup, configuration, or usage
+title: "[HELP] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before asking, please check the [setup guides](../docs/setup/) and existing issues — your question may already be answered.
+
+  - type: checkboxes
+    id: area
+    attributes:
+      label: What do you need help with?
+      description: Check all that apply.
+      options:
+        - label: Account / API key setup (Groq, Supabase, Resend, Gemini, Reddit)
+        - label: Render deployment
+        - label: UptimeRobot setup
+        - label: Environment variables / `.env` configuration
+        - label: Running the project locally
+        - label: Understanding how a part of the project works
+    validations:
+      required: false
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: Be as specific as you can. The more detail you provide, the easier it is to help.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What Have You Already Tried?
+      description: List any steps you've taken, guides you've followed, or things you've checked. This helps avoid repeating suggestions.
+      placeholder: |
+        -
+        -
+        -
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant Configuration
+      description: |
+        If your question is about a setup or deployment issue, paste the relevant part of your `.env` here.
+        ⚠️ **Remove all actual values before posting.** Replace them with placeholders like `your_value_here`. Never share real API keys, database URLs, or secrets.
+      render: shell
+      placeholder: |
+        GROQ_API_KEY=your_value_here
+        DATABASE_URL=your_value_here
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or Error Messages
+      description: If you're seeing an error, paste it here.
+      render: shell
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment Type
+      options:
+        - Render (free tier)
+        - Render (paid)
+        - Local Docker
+        - Not yet deployed
+        - Other
+
+  - type: input
+    id: python
+    attributes:
+      label: Python Version
+      placeholder: e.g. 3.11.4
+
+  - type: input
+    id: commit
+    attributes:
+      label: Branch / Commit
+      placeholder: e.g. main / a1b2c3d
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Anything else that might help answer your question.

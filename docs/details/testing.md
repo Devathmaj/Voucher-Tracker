@@ -119,9 +119,8 @@ pytest -v
 A typical test run will produce output similar to:
 
 ```text
-106 passed
+107 passed
 15 skipped
-1 failed
 ```
 
 ### ✅ Passed
@@ -141,11 +140,11 @@ For example:
 
 This confirms that the correct collector is configured for each source rather than indicating a problem.
 
+The deduplication suite also includes URL canonicalization checks that verify tracking parameters are removed and host matching is parsed safely rather than relying on substring checks.
+
 ### ❌ Failed
 
 A failed test indicates that the implementation does not currently match the expected behaviour or that an optional external dependency has not been configured.
-
-At the time of writing, the only expected failure is related to the Reddit integration.
 
 The project supports collecting voucher information from Reddit, which requires Reddit API credentials. These credentials are intentionally **not** included in the repository.
 

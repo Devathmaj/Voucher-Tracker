@@ -1,0 +1,141 @@
+name: Source Suggestion
+description: Suggest a new source for VoucherBot to monitor
+title: "[SOURCE] "
+labels: ["new-source"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting, please read the [source contribution guidelines](../CONTRIBUTING.md#adding-or-modifying-sources) in CONTRIBUTING.md.
+
+  - type: input
+    id: name
+    attributes:
+      label: Source Name
+      description: A unique, descriptive name for this source.
+      placeholder: e.g. Microsoft Learn Blog
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: Source URL
+      description: The base URL of the site or community.
+      placeholder: e.g. https://techcommunity.microsoft.com
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Source Type
+      options:
+        - RSS
+        - BLOG
+        - EVENT
+        - FORUM
+        - WEBSITE
+        - API
+        - REDDIT
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Suggested Priority Tier
+      description: "A = every 15 min · B = every 60 min · C = every 240 min · D = every 720 min"
+      options:
+        - "A — every 15 min (only if source updates very frequently)"
+        - "B — every 60 min"
+        - "C — every 240 min"
+        - "D — every 720 min"
+    validations:
+      required: true
+
+  - type: textarea
+    id: tier_reason
+    attributes:
+      label: Reason for Priority Tier
+      description: Why does this source deserve the tier you selected?
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ### Config Details
+        Fill in only the field(s) relevant to your source type and leave the rest blank.
+
+  - type: input
+    id: feed_url
+    attributes:
+      label: "RSS — feed_url"
+      placeholder: e.g. https://example.com/feed.xml
+
+  - type: input
+    id: article_selector
+    attributes:
+      label: "Website — article_selector"
+      placeholder: e.g. div.post-title a
+
+  - type: input
+    id: content_selector
+    attributes:
+      label: "Website — content_selector"
+      placeholder: e.g. div.post-body
+
+  - type: input
+    id: subreddit
+    attributes:
+      label: "Reddit — subreddit"
+      placeholder: e.g. r/AzureCertifications
+
+  - type: markdown
+    attributes:
+      value: "---"
+
+  - type: textarea
+    id: relevance
+    attributes:
+      label: Why It's Relevant
+      description: Explain why you believe this source posts certification vouchers, discounts, or promotions.
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Example Posts / URLs
+      description: Link to 1–3 real examples of voucher-related content from this source.
+      placeholder: |
+        -
+        -
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional Notes
+      description: Anything worth flagging — paywalls, login walls, unusual update patterns, etc.
+
+  - type: markdown
+    attributes:
+      value: "---"
+
+  - type: checkboxes
+    id: compliance
+    attributes:
+      label: Compliance Checklist
+      description: Please confirm all of the following before submitting.
+      options:
+        - label: I have manually checked this site's `robots.txt` and automated access is **not** disallowed.
+          required: true
+        - label: "**Reddit sources only:** I have read the subreddit's sidebar rules and automated reading is not prohibited by the moderators."
+        - label: "**Reddit sources only:** The suggested priority tier is **A or B** (not C or D)."
+        - label: This source genuinely posts certification vouchers, discounts, or promotions — not just adjacent topics.
+          required: true

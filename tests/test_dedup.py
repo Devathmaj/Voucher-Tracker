@@ -10,11 +10,13 @@ Covers:
 from __future__ import annotations
 
 import pytest
+from urllib.parse import urlparse
 
 from voucherbot.providers.base import NormalizedPost
 from voucherbot.services.ingestion.dedup import (
     content_hash,
     deduplicate_batch,
+    identity_hash,
     normalise_url,
 )
 
@@ -48,7 +50,7 @@ class TestNormaliseUrl:
 
     def test_lowercases_host(self):
         url = "https://Example.COM/page"
-        assert "example.com" in normalise_url(url)
+        assert urlparse(normalise_url(url)).hostname == "example.com"
 
     def test_preserves_non_tracking_params(self):
         url = "https://example.com/search?q=az900&page=2"
@@ -85,8 +87,8 @@ class TestContentHash:
         assert h1 == h2
 
     def test_strips_utm_from_url_before_hashing(self):
-        h1 = content_hash("Post", "https://example.com/p")
-        h2 = content_hash("Post", "https://example.com/p?utm_source=reddit")
+        h1 = identity_hash("https://example.com/p")
+        h2 = identity_hash("https://example.com/p?utm_source=reddit")
         assert h1 == h2
 
     def test_different_titles_produce_different_hashes(self):

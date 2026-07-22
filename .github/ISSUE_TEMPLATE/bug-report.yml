@@ -1,0 +1,105 @@
+name: Bug Report
+description: Report a bug or unexpected behaviour in VoucherBot
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much detail as you can.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behaviour
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behaviour
+      description: What actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the issue.
+      placeholder: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: component
+    attributes:
+      label: Affected Component
+      description: Check all that apply.
+      options:
+        - label: Scheduler
+        - label: Dispatcher
+        - label: HTTP Policy Layer (`http_policy.py`)
+        - label: RSS Collector
+        - label: Website Collector
+        - label: Reddit Integration (`reddit/client.py` / `reddit/collector.py`)
+        - label: AI Layer (Groq / Gemini)
+        - label: Email Notifications (Resend)
+        - label: Database / Migrations
+        - label: API / Routers
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or Error Messages
+      description: Paste any relevant logs here. **Do not include real API keys, database URLs, or any secrets.**
+      render: shell
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, drag and drop screenshots here to help explain the problem.
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment Type
+      options:
+        - Render (free tier)
+        - Render (paid)
+        - Local Docker
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python Version
+      placeholder: e.g. 3.11.4
+
+  - type: input
+    id: commit
+    attributes:
+      label: Branch / Commit
+      placeholder: e.g. main / a1b2c3d
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional Notes
+      description: Anything else that might help diagnose the issue.
