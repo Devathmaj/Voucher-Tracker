@@ -328,8 +328,13 @@ Per-model rate limiting tracks requests and token budgets. The system also uses 
 | url | string | |
 | title | string | |
 | content | text | |
+| summary | text | optional short description |
+| author | string | |
+| published_at | timestamptz | |
 | status | enum | QUEUED / FILTERED / PROCESSED |
 | score | integer | keyword score |
+| raw_data | JSONB | original collection payload |
+| vendor | string (nullable) | resolved from vendor_mappings table |
 | ai_result | JSONB | full extracted-event payload |
 | content_hash | string(40) | hash of title/content/date |
 | event_id | integer FK | canonical event link |
@@ -369,9 +374,21 @@ Per-model rate limiting tracks requests and token budgets. The system also uses 
 | acquired_at | timestamptz |
 | expires_at | timestamptz |
 
+### vendor_mappings
+
+Lookup table mapping source URLs and source names to canonical vendor names.
+URL patterns are checked first (startswith match against post URL), then source name patterns (substring match on source name).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | integer PK | |
+| url_pattern | string (nullable) | base URL prefix for startswith matching |
+| source_name_pattern | string (nullable, unique) | lowercase substring pattern for source name |
+| vendor | string (not null) | canonical vendor name (e.g. "aws", "microsoft") |
+
 ### voucher_posts view
 
-This read-only view exposes AI-confirmed vouchers for the alerts API. It flattens the AI JSON payload into columns suitable for simple list endpoints.
+This read-only view exposes AI-confirmed vouchers for the alerts API. It flattens the AI JSON payload into columns suitable for simple list endpoints. The `vendor` column now comes directly from `posts.vendor` (resolved from `vendor_mappings`) rather than the AI guess in `ai_result->>'vendor'`.
 
 ---
 

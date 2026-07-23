@@ -16,6 +16,7 @@ from voucherbot.config.settings import settings
 from voucherbot.models.base import Base
 from voucherbot.models.event import Event  # noqa: F401 – ensures Event is in Base.metadata
 from voucherbot.models.pipeline_lock import PipelineLock  # noqa: F401
+from voucherbot.models.vendor_mapping import VendorMapping  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

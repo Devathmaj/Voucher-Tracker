@@ -88,7 +88,7 @@ These guides cover getting your app running in the cloud and keeping it alive. T
 | 🗂️ [Schema](./docs/details/schema.md) | The project's data schema. |
 | ℹ️ [Project Info](./docs/details/project-info.md) | General information about the project. |
 | 🧪 [Testing](./docs/details/testing.md) | How to run the automated test suite, what to expect while testing, and simple troubleshooting steps. |
-| 📰 [Sources](./sources/README.md) | An overview of all the sources used by the project. |
+| 📰 [Sources](./sources/source.md) | An overview of all the sources used by the project. |
 
 ---
 

@@ -53,6 +53,7 @@ class Post(Base):
     )
     score: Mapped[int] = mapped_column(Integer, default=0)
     raw_data: Mapped[Optional[Any]] = mapped_column(JSONB)
+    vendor: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     ai_result: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
     # True after a voucher alert email was successfully sent (status stays PROCESSED).
     is_notified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)

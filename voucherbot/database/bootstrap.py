@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 from voucherbot.database.connection import AsyncSessionLocal
 from voucherbot.models.keyword import Keyword
 from voucherbot.models.source import Source, SourceType
+from voucherbot.models.vendor_mapping import VendorMapping
 
 logger = structlog.get_logger(__name__)
 
@@ -491,6 +492,59 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
 ]
 
 
+# Vendor mappings: URL patterns (checked first) and source name patterns
+# (fallback).  Maps known official sources to their canonical vendor name.
+# Sources not listed here (aggregators, unknown) rely on AI to guess.
+VENDOR_MAPPINGS: list[dict[str, str | None]] = [
+    # ── URL-pattern entries (checked first, matched via startswith) ──────
+    {"url_pattern": "https://aws.amazon.com/blogs/training-and-certification/", "source_name_pattern": None, "vendor": "aws"},
+    {"url_pattern": "https://builder.aws.com/", "source_name_pattern": None, "vendor": "aws"},
+    {"url_pattern": "https://aws.amazon.com/events/", "source_name_pattern": None, "vendor": "aws"},
+    {"url_pattern": "https://aws.amazon.com/", "source_name_pattern": None, "vendor": "aws"},
+    {"url_pattern": "https://techcommunity.microsoft.com/", "source_name_pattern": None, "vendor": "microsoft"},
+    {"url_pattern": "https://learn.microsoft.com/", "source_name_pattern": None, "vendor": "microsoft"},
+    {"url_pattern": "https://blogs.microsoft.com/", "source_name_pattern": None, "vendor": "microsoft"},
+    {"url_pattern": "https://cloudblog.withgoogle.com/", "source_name_pattern": None, "vendor": "google cloud"},
+    {"url_pattern": "https://cloud.google.com/", "source_name_pattern": None, "vendor": "google cloud"},
+    {"url_pattern": "https://discuss.google.dev/", "source_name_pattern": None, "vendor": "google cloud"},
+    {"url_pattern": "https://newsroom.cisco.com/", "source_name_pattern": None, "vendor": "cisco"},
+    {"url_pattern": "https://www.ciscolive.com/", "source_name_pattern": None, "vendor": "cisco"},
+    {"url_pattern": "https://www.redhat.com/", "source_name_pattern": None, "vendor": "red hat"},
+    {"url_pattern": "https://www.linuxfoundation.org/", "source_name_pattern": None, "vendor": "linux foundation"},
+    {"url_pattern": "https://www.linux.com/", "source_name_pattern": None, "vendor": "linux foundation"},
+    {"url_pattern": "https://www.comptia.org/", "source_name_pattern": None, "vendor": "comptia"},
+    {"url_pattern": "https://www.isc2.org/", "source_name_pattern": None, "vendor": "isc2"},
+    {"url_pattern": "https://feeds.libsyn.com/459162/", "source_name_pattern": None, "vendor": "oracle"},
+    {"url_pattern": "https://oracleuniversitypodcast.libsyn.com/", "source_name_pattern": None, "vendor": "oracle"},
+    {"url_pattern": "https://msfthub.com/", "source_name_pattern": None, "vendor": "microsoft"},
+    {"url_pattern": "https://packetpilot.com/", "source_name_pattern": None, "vendor": "packet pilot"},
+    {"url_pattern": "https://www.pluralsight.com/", "source_name_pattern": None, "vendor": "pluralsight"},
+
+    # ── Source-name-pattern entries (fallback) ───────────────────────────
+    {"url_pattern": None, "source_name_pattern": "aws training", "vendor": "aws"},
+    {"url_pattern": None, "source_name_pattern": "aws builder", "vendor": "aws"},
+    {"url_pattern": None, "source_name_pattern": "aws events", "vendor": "aws"},
+    {"url_pattern": None, "source_name_pattern": "aws reinvent", "vendor": "aws"},
+    {"url_pattern": None, "source_name_pattern": "microsoft learn", "vendor": "microsoft"},
+    {"url_pattern": None, "source_name_pattern": "microsoft blog", "vendor": "microsoft"},
+    {"url_pattern": None, "source_name_pattern": "microsoft events", "vendor": "microsoft"},
+    {"url_pattern": None, "source_name_pattern": "google cloud", "vendor": "google cloud"},
+    {"url_pattern": None, "source_name_pattern": "cisco newsroom", "vendor": "cisco"},
+    {"url_pattern": None, "source_name_pattern": "cisco live", "vendor": "cisco"},
+    {"url_pattern": None, "source_name_pattern": "cisco", "vendor": "cisco"},
+    {"url_pattern": None, "source_name_pattern": "red hat", "vendor": "red hat"},
+    {"url_pattern": None, "source_name_pattern": "linux foundation", "vendor": "linux foundation"},
+    {"url_pattern": None, "source_name_pattern": "linux.com", "vendor": "linux foundation"},
+    {"url_pattern": None, "source_name_pattern": "comptia", "vendor": "comptia"},
+    {"url_pattern": None, "source_name_pattern": "isc2", "vendor": "isc2"},
+    {"url_pattern": None, "source_name_pattern": "oracle university", "vendor": "oracle"},
+    {"url_pattern": None, "source_name_pattern": "msfthub", "vendor": "microsoft"},
+    {"url_pattern": None, "source_name_pattern": "packet pilot", "vendor": "packet pilot"},
+    {"url_pattern": None, "source_name_pattern": "cloud academy", "vendor": "pluralsight"},
+    {"url_pattern": None, "source_name_pattern": "pearsonvue", "vendor": "pearson vue"},
+]
+
+
 async def bootstrap_data() -> None:
     """Populate sources and keywords. Safe to re-run."""
     logger.info("Running database bootstrap")
@@ -551,6 +605,35 @@ async def bootstrap_data() -> None:
                     },
                 )
             )
+
+        for mapping in VENDOR_MAPPINGS:
+            if mapping.get("url_pattern"):
+                stmt = (
+                    insert(VendorMapping)
+                    .values(
+                        url_pattern=mapping["url_pattern"],
+                        source_name_pattern=None,
+                        vendor=mapping["vendor"],
+                    )
+                    .on_conflict_do_update(
+                        index_elements=["url_pattern"],
+                        set_={"vendor": mapping["vendor"]},
+                    )
+                )
+            else:
+                stmt = (
+                    insert(VendorMapping)
+                    .values(
+                        url_pattern=None,
+                        source_name_pattern=mapping["source_name_pattern"],
+                        vendor=mapping["vendor"],
+                    )
+                    .on_conflict_do_update(
+                        index_elements=["source_name_pattern"],
+                        set_={"vendor": mapping["vendor"]},
+                    )
+                )
+            await session.execute(stmt)
 
         for sub in DISABLED_REDDIT_SUBREDDITS:
             await session.execute(

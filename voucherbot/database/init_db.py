@@ -7,6 +7,7 @@ import voucherbot.models.post  # noqa: F401 — Post only; VoucherPost is a view
 import voucherbot.models.keyword  # noqa: F401
 import voucherbot.models.event  # noqa: F401
 import voucherbot.models.pipeline_lock  # noqa: F401
+import voucherbot.models.vendor_mapping  # noqa: F401
 
 
 async def init_db() -> None:

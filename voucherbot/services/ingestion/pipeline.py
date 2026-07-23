@@ -41,8 +41,71 @@ from voucherbot.services.email.notifications import notify_voucher_found
 from voucherbot.services.ingestion.dedup import identity_hash, content_hash
 from voucherbot.services.ingestion.event_matcher import EventMatcher
 from voucherbot.models.event import MatchConfidence
+from voucherbot.models.vendor_mapping import VendorMapping
 
 logger = structlog.get_logger(__name__)
+
+
+from urllib.parse import urlparse
+
+
+async def _load_vendor_mappings(
+    db: AsyncSession,
+) -> list[dict[str, str | None]]:
+    """Load all vendor mappings from the database table."""
+    result = await db.execute(
+        select(
+            VendorMapping.url_pattern,
+            VendorMapping.source_name_pattern,
+            VendorMapping.vendor,
+        )
+    )
+    return [
+        {
+            "url_pattern": str(row.url_pattern) if row.url_pattern else None,
+            "source_name_pattern": str(row.source_name_pattern) if row.source_name_pattern else None,
+            "vendor": str(row.vendor),
+        }
+        for row in result.all()
+    ]
+
+
+def _normalise_url_for_match(url: str) -> str:
+    """Strip trailing slashes and query params for consistent startswith matching."""
+    parsed = urlparse(url)
+    path = parsed.path.rstrip("/") or "/"
+    return f"{parsed.scheme}://{parsed.netloc}{path}"
+
+
+def _resolve_vendor(
+    source_name: str,
+    base_url: str | None,
+    mappings: list[dict[str, str | None]],
+) -> str | None:
+    """Resolve the vendor for a source using the loaded mappings.
+
+    Priority:
+      1. URL-pattern match against the source's base URL (startswith).
+      2. Source-name-pattern match (lowercase substring).
+    Returns ``None`` for aggregators / unknown sources so the AI can guess.
+    """
+    # 1. Try URL pattern match
+    if base_url:
+        normalised = _normalise_url_for_match(base_url)
+        for m in mappings:
+            pat = m.get("url_pattern")
+            if pat and normalised.startswith(pat.rstrip("/")):
+                return m["vendor"]
+
+    # 2. Fallback to source name pattern match
+    name_lower = source_name.lower()
+    for m in mappings:
+        pat = m.get("source_name_pattern")
+        if pat and pat in name_lower:
+            return m["vendor"]
+
+    return None
+
 
 SCORE_THRESHOLD = 1
 _AI_CONTENT_LIMIT = 500
@@ -186,6 +249,9 @@ async def _process_one_source(
     # INSERT on new identity; UPDATE only when content_hash changed.
     inserted_posts: list[tuple[NormalizedPost, Post, bool]] = []  # (raw, db, is_new)
 
+    vendor_mappings = await _load_vendor_mappings(db)
+    source_vendor = _resolve_vendor(source.name, source.base_url, vendor_mappings)
+
     for post, score, ih, ch in deduped:
         stmt = (
             insert(Post)
@@ -203,6 +269,7 @@ async def _process_one_source(
                 raw_data=post.raw_data,
                 content_hash=ch,
                 is_notified=False,
+                vendor=source_vendor,
             )
             .on_conflict_do_update(
                 constraint="uq_posts_source_external",
@@ -212,6 +279,7 @@ async def _process_one_source(
                     "summary": insert(Post).excluded.summary,
                     "content_hash": insert(Post).excluded.content_hash,
                     "status": PostStatus.QUEUED,
+                    "vendor": insert(Post).excluded.vendor,
                 },
                 where=Post.content_hash != ch,
             )
@@ -274,7 +342,7 @@ async def _process_one_source(
         batch_inputs = [
             (post.title, _ai_content(post.content)) for post, _, _ in inserted_posts
         ]
-        batch_results = await analyze_post_batch(batch_inputs)
+        batch_results = await analyze_post_batch(batch_inputs, source.name)
 
         for (post, db_post, is_new), extracted in zip(inserted_posts, batch_results):
             if extracted is None:
@@ -282,6 +350,11 @@ async def _process_one_source(
 
             db_post.ai_result = extracted.model_dump()
             stats["ai_analyzed"] += 1
+
+            # Override vendor from source mapping for known sources.
+            # For unknown sources (aggregators), keep AI's educated guess.
+            if source_vendor:
+                extracted.vendor = source_vendor
 
             if not extracted.is_voucher:
                 db_post.status = PostStatus.FILTERED

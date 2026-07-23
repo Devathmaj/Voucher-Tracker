@@ -1,18 +1,17 @@
-# Database schema (frozen)
+# Database schema
 
-**Frozen revision:** `g3b9c0d1e2f3`  
+**Current revision:** `j0k1l2m3n4o5`  
 Apply with: `alembic upgrade head`
-
-Do not add or alter tables for Reddit enablement — Reddit uses existing `sources` / `posts`. New schema work requires a new Alembic revision and an explicit un-freeze decision.
 
 ## Objects
 
 | Object | Type | Purpose |
 |--------|------|---------|
 | `sources` | table | Feeds, pages, subreddits + scheduler fields |
-| `posts` | table | Ingested items, `ai_result`, `is_notified`, `event_id` |
+| `posts` | table | Ingested items, `vendor`, `ai_result`, `is_notified`, `event_id` |
 | `events` | table | Canonical promotions |
 | `keywords` | table | Keyword scoring catalog |
+| `vendor_mappings` | table | URL/source-name pattern → vendor lookup |
 | `pipeline_lock` | table | Dispatcher lease |
 | `alembic_version` | table | Migration pointer |
 | `voucher_posts` | **view** | AI-confirmed vouchers only (`is_voucher` + `PROCESSED`) |

@@ -289,7 +289,7 @@ def _parse_to_extracted_event(raw_text: str) -> ExtractedEvent | None:
 # Provider adapters
 # ---------------------------------------------------------------------------
 async def _call_groq_model(
-    title: str, content: str | None, model: str
+    title: str, content: str | None, model: str, source_name: str | None = None
 ) -> ExtractedEvent | None:
     """Call a specific Groq model. Returns None on daily limit or non-retryable failure."""
     if not is_model_available(model):
@@ -301,7 +301,8 @@ async def _call_groq_model(
     client = AsyncGroq(api_key=settings.groq_api_key)
     content_for_prompt = content or "(no content)"
 
-    user_prompt = f"Title: {title}\n\nContent: {content_for_prompt}"
+    source_hint = f"Source: {source_name}\n" if source_name else ""
+    user_prompt = f"{source_hint}Title: {title}\n\nContent: {content_for_prompt}"
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt},
@@ -366,24 +367,31 @@ async def _call_groq_model(
     return None
 
 
-async def _call_groq(title: str, content: str | None) -> ExtractedEvent | None:
+async def _call_groq(
+    title: str, content: str | None, source_name: str | None = None
+) -> ExtractedEvent | None:
     """Try all batch models in order, skipping daily-exhausted ones."""
     for model in _GROQ_BATCH_MODELS:
         if not is_model_available(model):
             continue
-        result = await _call_groq_model(title, content, model)
+        result = await _call_groq_model(title, content, model, source_name)
         if result is not None:
             return result
     return None
 
 
-async def _call_gemini(title: str, content: str | None) -> ExtractedEvent | None:
+async def _call_gemini(
+    title: str, content: str | None, source_name: str | None = None
+) -> ExtractedEvent | None:
     """Gemini provider adapter.  Returns None on non-retryable failure."""
     from google import genai  # lazy import
 
     client = genai.Client(api_key=settings.gemini_api_key)
+    source_hint = f"Source: {source_name}\n" if source_name else ""
     full_prompt = (
-        _SYSTEM_PROMPT + f"Title: {title}\n\nContent: {content or '(no content)'}"
+        _SYSTEM_PROMPT
+        + source_hint
+        + f"Title: {title}\n\nContent: {content or '(no content)'}"
     )
 
     for attempt in range(1, _MAX_RETRIES + 1):
@@ -420,19 +428,21 @@ async def _call_gemini(title: str, content: str | None) -> ExtractedEvent | None
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-async def analyze_post(title: str, content: str | None) -> ExtractedEvent | None:
+async def analyze_post(
+    title: str, content: str | None, source_name: str | None = None
+) -> ExtractedEvent | None:
     """Extract structured promotion data from a single post.
 
     Provider priority: Groq/llama (primary) → Groq/gpt-oss (fallback) → Gemini (final fallback).
     Fallback is triggered only on non-429 failures; 429s are retried within each provider.
     """
     if settings.groq_api_key:
-        result = await _call_groq(title, content)
+        result = await _call_groq(title, content, source_name)
         if result is not None:
             return result
 
     if settings.gemini_api_key:
-        result = await _call_gemini(title, content)
+        result = await _call_gemini(title, content, source_name)
         if result is not None:
             return result
 
@@ -446,6 +456,7 @@ async def analyze_post(title: str, content: str | None) -> ExtractedEvent | None
 
 async def analyze_post_batch(
     posts: list[tuple[str, str | None]],
+    source_name: str | None = None,
 ) -> list[ExtractedEvent | None]:
     """Analyze multiple posts concurrently, distributing across available Groq models.
 
@@ -456,14 +467,14 @@ async def analyze_post_batch(
     Returns results in the same order as the input list.
     """
     if not settings.groq_api_key or not posts:
-        return [await analyze_post(t, c) for t, c in posts]
+        return [await analyze_post(t, c, source_name) for t, c in posts]
 
     available = [m for m in _GROQ_BATCH_MODELS if is_model_available(m)]
     if not available:
         logger.warning(
             "ai.analyzer: all Groq models daily-exhausted, falling back to Gemini"
         )
-        return [await _call_gemini(t, c) for t, c in posts]
+        return [await _call_gemini(t, c, source_name) for t, c in posts]
 
     n = len(available)
 
@@ -475,11 +486,11 @@ async def analyze_post_batch(
                 model = available[(idx + attempt_offset) % n]
                 if not is_model_available(model):
                     continue
-                result = await _call_groq_model(title, content, model)
+                result = await _call_groq_model(title, content, model, source_name)
                 if result is not None:
                     return idx, result
             if settings.gemini_api_key:
-                return idx, await _call_gemini(title, content)
+                return idx, await _call_gemini(title, content, source_name)
         return idx, None
 
     results: list[ExtractedEvent | None] = [None] * len(posts)
