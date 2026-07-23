@@ -24,6 +24,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 import structlog
 from sqlalchemy import select
@@ -44,9 +45,6 @@ from voucherbot.models.event import MatchConfidence
 from voucherbot.models.vendor_mapping import VendorMapping
 
 logger = structlog.get_logger(__name__)
-
-
-from urllib.parse import urlparse
 
 
 async def _load_vendor_mappings(
