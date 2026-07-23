@@ -160,7 +160,5 @@ def downgrade() -> None:
     op.drop_index(
         "ix_vendor_mappings_source_name_pattern", table_name="vendor_mappings"
     )
-    op.drop_index(
-        "ix_vendor_mappings_url_pattern", table_name="vendor_mappings"
-    )
+    op.drop_index("ix_vendor_mappings_url_pattern", table_name="vendor_mappings")
     op.drop_table("vendor_mappings")

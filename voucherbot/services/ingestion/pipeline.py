@@ -63,7 +63,9 @@ async def _load_vendor_mappings(
     return [
         {
             "url_pattern": str(row.url_pattern) if row.url_pattern else None,
-            "source_name_pattern": str(row.source_name_pattern) if row.source_name_pattern else None,
+            "source_name_pattern": str(row.source_name_pattern)
+            if row.source_name_pattern
+            else None,
             "vendor": str(row.vendor),
         }
         for row in result.all()
