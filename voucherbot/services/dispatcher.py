@@ -164,6 +164,10 @@ async def _pick_due_source(session: AsyncSession) -> Source | None:
     now = datetime.now(timezone.utc)
     filters = [
         Source.enabled.is_(True),
+        or_(
+            Source.config["unsupported"].is_(None),
+            Source.config["unsupported"].as_string() != "true",
+        ),
         or_(Source.next_due_at.is_(None), Source.next_due_at <= now),
         or_(Source.backoff_until.is_(None), Source.backoff_until <= now),
     ]
