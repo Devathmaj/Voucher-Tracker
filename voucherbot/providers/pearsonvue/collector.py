@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 import asyncio
 import hashlib
 import structlog
@@ -63,11 +63,11 @@ def _element_has_promo_text(el: Tag) -> bool:
 def _find_promo_card_parent(el: Tag, max_depth: int = 5) -> Tag | None:
     """Walk up from *el* to find a card-like parent container."""
     depth = 0
-    current = el
+    current: Tag | None = el
     while current and depth < max_depth:
-        classes = " ".join(current.get("class", []))
-        eid = current.get("id", "")
-        tag = current.name
+        classes = " ".join(current.get_attribute_list("class"))
+        eid = str(current.get("id", "") or "")
+        tag = current.name or ""
         combined = f"{tag} {classes} {eid}"
         if any(
             kw in combined.lower()
@@ -135,17 +135,17 @@ def _extract_promo_cards(soup: BeautifulSoup, url: str) -> list[dict[str, Any]]:
         for el in main.find_all(["h2", "h3", "h4", "h5", "p", "li", "strong", "a"]):
             if not _element_has_promo_text(el):
                 continue
-            card = _find_promo_card_parent(el)
-            if card is None:
-                card = el
+            card_parent = _find_promo_card_parent(el)
+            if card_parent is None:
+                card_parent = el
 
-            h = card.find(["h2", "h3", "h4", "h5"]) or card.find("strong")
-            p = card.find("p")
-            a = card.find("a", href=True)
+            h = card_parent.find(["h2", "h3", "h4", "h5"]) or card_parent.find("strong")
+            p = card_parent.find("p")
+            a = card_parent.find("a", href=True)
 
             title = h.get_text(strip=True) if h else el.get_text(strip=True)[:120]
             desc = p.get_text(strip=True) if p else ""
-            link = a["href"] if a else ""
+            link = str(a.get("href", "")) if a and a.get("href") else ""
 
             text_key = (title + desc).lower().strip()
             if text_key and text_key not in seen_texts:
@@ -224,12 +224,15 @@ class PearsonVUECollector(BaseCollector):
         results: list[NormalizedPost] = []
 
         # ── Strategy 1: slide-attribute promotions ─────────────────────────
-        for el in soup.find_all(lambda tag: tag.has_attr("data-slide-url-title")):
-            slide_title = el["data-slide-url-title"]
-            slide_url = el.get("data-slide-url", "")
+        for el in soup.find_all(lambda t: t.has_attr("data-slide-url-title")):
+            slide_title_raw = el["data-slide-url-title"]
+            slide_url_raw = el.get("data-slide-url", "")
 
+            slide_title = str(slide_title_raw) if slide_title_raw else ""
             if not slide_title:
                 continue
+
+            slide_url = str(slide_url_raw) if slide_url_raw else ""
 
             full_url = slide_url
             if full_url and not full_url.startswith("http"):
@@ -248,7 +251,7 @@ class PearsonVUECollector(BaseCollector):
                 f"pearsonvue-{vendor}-{slide_title}".encode()
             ).hexdigest()[:32]
 
-            content_parts = [slide_title]
+            content_parts: list[str] = [slide_title]
             if slide_text and slide_text != slide_title:
                 content_parts.append(slide_text)
 
@@ -266,9 +269,11 @@ class PearsonVUECollector(BaseCollector):
                 )
             )
 
-        for el in soup.find_all(lambda tag: tag.has_attr("data-slide-url")):
-            slide_url = el["data-slide-url"]
+        for el in soup.find_all(lambda t: t.has_attr("data-slide-url")):
+            slide_url_raw = el["data-slide-url"]
             slide_text = el.get_text(separator=" ", strip=True)
+
+            slide_url = str(slide_url_raw) if slide_url_raw else ""
             if slide_url and slide_url not in seen_urls:
                 seen_urls.add(slide_url)
 
@@ -344,20 +349,20 @@ class PearsonVUECollector(BaseCollector):
             current_heading = None
 
             for el in main.find_all(["h1", "h2", "h3", "h4", "p", "li", "a"]):
-                tag = el.name
+                tag_name = el.name or ""
                 text = el.get_text(separator=" ", strip=True)
                 if not text or len(text) < 5:
                     continue
-                if tag in ("h1", "h2", "h3", "h4"):
+                if tag_name in ("h1", "h2", "h3", "h4"):
                     current_heading = text
                 else:
                     entry: dict[str, Any] = {
                         "heading": current_heading,
-                        "type": tag,
+                        "type": tag_name,
                         "text": text,
                     }
-                    if tag == "a" and el.get("href"):
-                        entry["href"] = el["href"]
+                    if tag_name == "a" and el.get("href"):
+                        entry["href"] = str(el.get("href"))
                     sections.append(entry)
 
             last_updated = _extract_last_updated(soup)
