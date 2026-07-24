@@ -8,7 +8,7 @@ ingestion pipeline only ever sees this type — never a provider-specific dict.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 from pydantic import BaseModel, field_validator, model_validator
 
 
@@ -63,7 +63,7 @@ class ExtractedEvent(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def strip_nulls_from_arrays(cls, data: dict) -> dict:
+    def strip_nulls_from_arrays(cls, data: dict[str, Any]) -> dict[str, Any]:
         """Remove None/null entries from list fields like certifications and regions.
         The AI sometimes emits ``[null]`` instead of ``null`` or ``[]``.
         """
