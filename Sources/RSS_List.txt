@@ -24,7 +24,7 @@
 [B] RSS | rss:cisco_newsroom_security | 60 min | https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json?feed=security
 [B] RSS | rss:cisco_newsroom_press | 60 min | https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json?feed=press-releases
 [D] BLOG | blog:oracle_university_blog | 720 min | https://feeds.libsyn.com/459162/rss
-[C] RSS | rss:petri_it | 240 min | https://petri.com/feed/feed
+[C] RSS | rss:petri_it | 240 min | https://petri.com/feed/
 [C] RSS | rss:infoq | 240 min | https://feed.infoq.com
 [C] RSS | rss:the_register | 240 min | https://www.theregister.com/headlines.atom
 [C] RSS | rss:techtarget_aws | 240 min | https://www.techtarget.com/searchaws/rss/News-on-amazon-web-services-trends-and-technology.xml
@@ -33,3 +33,14 @@
 [C] RSS | rss:databricks_learning_events | 240 min | https://community.databricks.com/rss/board?board.id=databricks-community-events
 [C] RSS | rss:hashicorp_blog | 240 min | https://www.hashicorp.com/blog/feed.xml
 [B] BLOG | blog:linux_foundation_training_blog | 60 min | https://training.linuxfoundation.org/feed/
+[B] BLOG | blog:cncf_blog | 60 min | https://www.cncf.io/blog/feed/
+[B] RSS | rss:lf_events | 60 min | https://events.linuxfoundation.org/feed/
+[B] BLOG | blog:vmware_vmtn_blog | 60 min | https://blogs.vmware.com/vmtn/feed/
+[B] BLOG | blog:elastic_blog | 60 min | https://www.elastic.co/blog/feed
+[B] BLOG | blog:suse_c_blog | 60 min | https://www.suse.com/c/feed/
+[B] BLOG | blog:canonical_blog | 60 min | https://canonical.com/blog/feed
+[B] BLOG | blog:ubuntu_blog | 60 min | https://ubuntu.com/blog/feed
+[B] BLOG | blog:sas_training_blog | 60 min | https://blogs.sas.com/content/sastraining/feed/
+[C] BLOG | blog:docker_blog | 240 min | https://www.docker.com/blog/feed/
+[C] BLOG | blog:neo4j_blog | 240 min | https://neo4j.com/blog/feed/
+[C] RSS | rss:confluent_feed | 240 min | https://www.confluent.io/feed/

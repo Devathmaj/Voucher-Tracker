@@ -519,11 +519,12 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         title_selector=".entry-title, h2, h1",
         link_selector=".entry-title a, h2 a, h1 a",
         priority_tier="C",
+        note="Requires browser-like User-Agent + Accept headers (403 without them).",
     ),
     # ── RSS/news feeds (from parser.py) ───────────────────────────────────
     _feed(
         "Petri IT",
-        "https://petri.com/feed/feed",
+        "https://petri.com/feed/",
         SourceType.RSS,
         vendor="Petri IT",
         priority_tier="C",
@@ -602,6 +603,79 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         article_selector="main .promotion, article, .card",
         priority_tier="B",
         priority=2,
+    ),
+    # ── New vendor feeds ──────────────────────────────────────────────────
+    _feed(
+        "CNCF Blog",
+        "https://www.cncf.io/blog/feed/",
+        SourceType.BLOG,
+        vendor="Linux Foundation",
+        priority=2,
+    ),
+    _feed(
+        "LF Events",
+        "https://events.linuxfoundation.org/feed/",
+        SourceType.RSS,
+        vendor="Linux Foundation",
+        priority=2,
+    ),
+    _feed(
+        "VMware VMTN Blog",
+        "https://blogs.vmware.com/vmtn/feed/",
+        SourceType.BLOG,
+        vendor="VMware",
+    ),
+    _feed(
+        "Elastic Blog",
+        "https://www.elastic.co/blog/feed",
+        SourceType.BLOG,
+        vendor="Elastic",
+    ),
+    _feed(
+        "SUSE C Blog",
+        "https://www.suse.com/c/feed/",
+        SourceType.BLOG,
+        vendor="SUSE",
+    ),
+    _feed(
+        "Canonical Blog",
+        "https://canonical.com/blog/feed",
+        SourceType.BLOG,
+        vendor="Canonical",
+    ),
+    _feed(
+        "Ubuntu Blog",
+        "https://ubuntu.com/blog/feed",
+        SourceType.BLOG,
+        vendor="Canonical",
+        priority=2,
+    ),
+    _feed(
+        "SAS Training Blog",
+        "https://blogs.sas.com/content/sastraining/feed/",
+        SourceType.BLOG,
+        vendor="SAS",
+    ),
+    _feed(
+        "Docker Blog",
+        "https://www.docker.com/blog/feed/",
+        SourceType.BLOG,
+        vendor="Docker",
+        priority_tier="C",
+    ),
+    _feed(
+        "Neo4j Blog",
+        "https://neo4j.com/blog/feed/",
+        SourceType.BLOG,
+        vendor="Neo4j",
+        priority_tier="C",
+    ),
+    _feed(
+        "Confluent Blog",
+        "https://www.confluent.io/feed/",
+        SourceType.RSS,
+        vendor="Confluent",
+        priority_tier="C",
     ),
     # ── Pearson VUE vendor pages ──────────────────────────────────────────
     {
@@ -1174,6 +1248,117 @@ VENDOR_MAPPINGS: list[dict[str, str | None]] = [
         "url_pattern": None,
         "source_name_pattern": "linux foundation promotions",
         "vendor": "linux foundation",
+    },
+    # ── New vendor mappings (CNCF, VMware, Elastic, SUSE, Canonical, SAS, Docker, Neo4j, Confluent) ──
+    {
+        "url_pattern": "https://www.cncf.io/",
+        "source_name_pattern": None,
+        "vendor": "linux foundation",
+    },
+    {
+        "url_pattern": "https://events.linuxfoundation.org/",
+        "source_name_pattern": None,
+        "vendor": "linux foundation",
+    },
+    {
+        "url_pattern": "https://blogs.vmware.com/",
+        "source_name_pattern": None,
+        "vendor": "vmware",
+    },
+    {
+        "url_pattern": "https://www.elastic.co/",
+        "source_name_pattern": None,
+        "vendor": "elastic",
+    },
+    {
+        "url_pattern": "https://www.suse.com/",
+        "source_name_pattern": None,
+        "vendor": "suse",
+    },
+    {
+        "url_pattern": "https://canonical.com/",
+        "source_name_pattern": None,
+        "vendor": "canonical",
+    },
+    {
+        "url_pattern": "https://ubuntu.com/",
+        "source_name_pattern": None,
+        "vendor": "canonical",
+    },
+    {
+        "url_pattern": "https://blogs.sas.com/",
+        "source_name_pattern": None,
+        "vendor": "sas",
+    },
+    {
+        "url_pattern": "https://www.docker.com/",
+        "source_name_pattern": None,
+        "vendor": "docker",
+    },
+    {
+        "url_pattern": "https://neo4j.com/",
+        "source_name_pattern": None,
+        "vendor": "neo4j",
+    },
+    {
+        "url_pattern": "https://www.confluent.io/",
+        "source_name_pattern": None,
+        "vendor": "confluent",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "cncf",
+        "vendor": "linux foundation",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "lf events",
+        "vendor": "linux foundation",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "vmware vmtn",
+        "vendor": "vmware",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "elastic",
+        "vendor": "elastic",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "suse c",
+        "vendor": "suse",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "canonical",
+        "vendor": "canonical",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "ubuntu",
+        "vendor": "canonical",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "sas training",
+        "vendor": "sas",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "docker",
+        "vendor": "docker",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "neo4j",
+        "vendor": "neo4j",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "confluent",
+        "vendor": "confluent",
     },
 ]
 
