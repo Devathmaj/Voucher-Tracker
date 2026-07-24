@@ -49,6 +49,12 @@ _SYSTEM_PROMPT = (
     "actionable promo intent.\n"
     "confidence is your belief in that intent (0.0–1.0). Do NOT require high "
     "confidence or a code to set is_voucher=true — use lower confidence instead.\n\n"
+    "For registration_url: extract the most specific action/registration link for "
+    "the promotion. When multiple URLs are present, prefer the direct registration "
+    "or 'START NOW'/'Sign up'/'Register' link over generic informational pages "
+    "(e.g., vendor certification pages, course catalog pages). The redemption page "
+    "for a voucher code or the promotion landing page is ideal. Use null if no "
+    "relevant URL is found.\n\n"
     "Respond with ONLY a valid JSON object matching this exact schema. If a field is unknown or not mentioned, use the JSON `null` literal (do not use strings like 'not mentioned'). Do NOT include comments.\n"
     "{\n"
     '  "is_voucher": true | false,\n'

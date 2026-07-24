@@ -1,21 +1,156 @@
 from typing import Any
 import asyncio
 import hashlib
+import re
 import structlog
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from voucherbot.providers.base import BaseCollector, NormalizedPost
 from voucherbot.providers.http_policy import polite_get, RobotsDisallowedError
 
 logger = structlog.get_logger(__name__)
 
+# Keywords that signal promotional content in Pearson VUE pages.
+_PROMO_KEYWORDS: list[str] = [
+    "voucher", "exam voucher", "free exam", "free certification",
+    "discount", "% off", "save", "sale", "special offer",
+    "promotion", "promo", "deal", "coupon",
+    "complimentary", "no cost", "credit",
+]
+
+# CSS selectors for promotion card containers on Pearson VUE pages.
+_CARD_SELECTORS: list[str] = [
+    ".promo-section", ".offer-section", ".special-offer",
+    ".promo-card", ".offer-card", ".deal-card",
+    ".promotion", ".offer", ".promo", ".card",
+    "[class*='promo']", "[class*='offer']",
+    "[class*='voucher']", "[class*='deal']",
+    "article",
+]
+
+
+def _element_has_promo_text(el: Tag) -> bool:
+    """Check if an element's visible text contains promotion keywords."""
+    text = el.get_text(separator=" ", strip=True).lower()
+    if not text:
+        return False
+    for kw in _PROMO_KEYWORDS:
+        if kw in text:
+            return True
+    return False
+
+
+def _find_promo_card_parent(el: Tag, max_depth: int = 5) -> Tag | None:
+    """Walk up from *el* to find a card-like parent container."""
+    depth = 0
+    current = el
+    while current and depth < max_depth:
+        classes = " ".join(current.get("class", []))
+        eid = current.get("id", "")
+        tag = current.name
+        combined = f"{tag} {classes} {eid}"
+        if any(
+            kw in combined.lower()
+            for kw in ["card", "promo", "offer", "deal", "voucher"]
+        ):
+            return current
+        if tag in ("section", "article", "div", "li") and any(
+            kw in combined.lower()
+            for kw in ["promo", "offer", "deal", "voucher", "special", "saving"]
+        ):
+            return current
+        current = current.parent
+        depth += 1
+    return None
+
+
+def _extract_promo_cards(soup: BeautifulSoup, url: str) -> list[dict[str, Any]]:
+    """Extract promotion items from Pearson VUE pages using keyword + card detection.
+
+    Strategy:
+    1. Try known CSS card selectors.
+    2. Fall back to keyword text search on all elements, then walk up to
+       find a card container.
+    3. Extract heading, description, and link from each card.
+    """
+    for tag in soup.select("nav, footer, header, script, style, .cookie-banner"):
+        tag.decompose()
+
+    main = soup.find("main") or soup.find("body")
+    if main is None:
+        return []
+
+    seen_texts: set[str] = set()
+    items: list[dict[str, Any]] = []
+
+    # Strategy 1: known card CSS selectors
+    cards_found: list[Tag] = []
+    for sel in _CARD_SELECTORS:
+        cards_found = soup.select(sel)
+        if cards_found:
+            break
+
+    if cards_found:
+        for card in cards_found:
+            h = card.find(["h2", "h3", "h4", "h5"])
+            p = card.find("p")
+            a = card.find("a", href=True)
+            strong = card.find("strong")
+
+            title = (
+                h.get_text(strip=True)
+                if h
+                else (strong.get_text(strip=True) if strong else "")
+            )
+            desc = p.get_text(strip=True) if p else ""
+            link = a["href"] if a else ""
+
+            text_key = (title + desc).lower().strip()
+            if text_key and text_key not in seen_texts and len(title) > 4:
+                seen_texts.add(text_key)
+                items.append({"title": title, "description": desc, "url": link})
+
+    # Strategy 2: keyword text search, walking up to card parent
+    if not items:
+        for el in main.find_all(["h2", "h3", "h4", "h5", "p", "li", "strong", "a"]):
+            if not _element_has_promo_text(el):
+                continue
+            card = _find_promo_card_parent(el)
+            if card is None:
+                card = el
+
+            h = card.find(["h2", "h3", "h4", "h5"]) or card.find("strong")
+            p = card.find("p")
+            a = card.find("a", href=True)
+
+            title = h.get_text(strip=True) if h else el.get_text(strip=True)[:120]
+            desc = p.get_text(strip=True) if p else ""
+            link = a["href"] if a else ""
+
+            text_key = (title + desc).lower().strip()
+            if text_key and text_key not in seen_texts:
+                seen_texts.add(text_key)
+                items.append({"title": title, "description": desc, "url": link})
+
+    return items
+
+
+def _extract_last_updated(soup: BeautifulSoup) -> str | None:
+    for p in soup.find_all("p"):
+        t = p.get_text(strip=True)
+        if t.startswith("Last updated"):
+            return t
+    return None
+
 
 class PearsonVUECollector(BaseCollector):
     """Scrapes Pearson VUE vendor program pages.
 
-    Returns one NormalizedPost per slider/promotion item found on the page
-    (via data-slide-url-title + data-slide-url attributes), plus one post
-    for the general page content.
+    Extracts promotions using three strategies:
+    1. Slide attributes (``data-slide-url-title`` / ``data-slide-url``) — legacy.
+    2. Keyword + card detection (``_extract_promo_cards``) — catches promotions
+       embedded directly in the HTML that are not behind slide attributes.
+    3. Generic page overview — fallback only when nothing else is found.
     """
 
     async def collect(
@@ -65,10 +200,10 @@ class PearsonVUECollector(BaseCollector):
             logger.warning("PearsonVUECollector: no main content found", url=url)
             return []
 
-        # ── Extract slider promotion items (individual posts) ─────────────
         seen_urls: set[str] = set()
         results: list[NormalizedPost] = []
 
+        # ── Strategy 1: slide-attribute promotions ─────────────────────────
         for el in soup.find_all(lambda tag: tag.has_attr("data-slide-url-title")):
             slide_title = el["data-slide-url-title"]
             slide_url = el.get("data-slide-url", "")
@@ -79,6 +214,7 @@ class PearsonVUECollector(BaseCollector):
             full_url = slide_url
             if full_url and not full_url.startswith("http"):
                 from urllib.parse import urljoin
+
                 full_url = urljoin(url, full_url)
 
             dedup_key = full_url or slide_title
@@ -119,6 +255,7 @@ class PearsonVUECollector(BaseCollector):
                 full_url = slide_url
                 if not full_url.startswith("http"):
                     from urllib.parse import urljoin
+
                     full_url = urljoin(url, full_url)
 
                 external_id = hashlib.sha256(
@@ -139,62 +276,109 @@ class PearsonVUECollector(BaseCollector):
                     )
                 )
 
-        # ── General page content as fallback ──────────────────────────────
-        sections = []
-        current_heading = None
+        # ── Strategy 2: keyword + card promotion extraction ────────────────
+        promo_items = await asyncio.to_thread(_extract_promo_cards, soup, url)
 
-        for el in main.find_all(["h1", "h2", "h3", "h4", "p", "li", "a"]):
-            tag = el.name
-            text = el.get_text(separator=" ", strip=True)
-            if not text or len(text) < 5:
+        for item in promo_items:
+            title = item.get("title", "")
+            desc = item.get("description", "")
+            item_url = item.get("url", "")
+
+            if not title and not desc:
                 continue
-            if tag in ("h1", "h2", "h3", "h4"):
-                current_heading = text
-            else:
-                entry: dict[str, Any] = {
-                    "heading": current_heading,
-                    "type": tag,
-                    "text": text,
-                }
-                if tag == "a" and el.get("href"):
-                    entry["href"] = el["href"]
-                sections.append(entry)
 
-        last_updated = None
-        for p in soup.find_all("p"):
-            t = p.get_text(strip=True)
-            if t.startswith("Last updated"):
-                last_updated = t
-                break
+            if item_url in seen_urls:
+                continue
+            if item_url:
+                seen_urls.add(item_url)
 
-        content_parts = [f"Last updated: {last_updated}"] if last_updated else []
-        for sec in sections:
-            line = sec["text"]
-            if sec.get("heading"):
-                line = f"[{sec['heading']}] {line}"
-            content_parts.append(line)
+            if item_url and not item_url.startswith("http"):
+                from urllib.parse import urljoin
 
-        page_external_id = hashlib.sha256(url.encode()).hexdigest()[:32]
-        results.append(
-            NormalizedPost(
-                external_id=page_external_id,
-                url=url,
-                title=f"Pearson VUE — {vendor} Certification Programs",
-                content="\n".join(content_parts),
-                summary=f"{len(sections)} sections across {vendor} certification programs on Pearson VUE",
-                raw_data={
-                    "scraped_from": url,
-                    "vendor": vendor,
-                    "type": "page_overview",
-                },
+                item_url = urljoin(url, item_url)
+
+            external_id = hashlib.sha256(
+                f"pearsonvue-{vendor}-card-{item_url or title}".encode()
+            ).hexdigest()[:32]
+
+            content = desc if desc else title
+
+            results.append(
+                NormalizedPost(
+                    external_id=external_id,
+                    url=item_url or url,
+                    title=title,
+                    content=content,
+                    summary=desc or None,
+                    raw_data={
+                        "scraped_from": url,
+                        "vendor": vendor,
+                        "type": "promo_card",
+                    },
+                )
             )
-        )
+
+        # ── Strategy 3: generic page overview (fallback) ───────────────────
+        if not results:
+            sections = []
+            current_heading = None
+
+            for el in main.find_all(["h1", "h2", "h3", "h4", "p", "li", "a"]):
+                tag = el.name
+                text = el.get_text(separator=" ", strip=True)
+                if not text or len(text) < 5:
+                    continue
+                if tag in ("h1", "h2", "h3", "h4"):
+                    current_heading = text
+                else:
+                    entry: dict[str, Any] = {
+                        "heading": current_heading,
+                        "type": tag,
+                        "text": text,
+                    }
+                    if tag == "a" and el.get("href"):
+                        entry["href"] = el["href"]
+                    sections.append(entry)
+
+            last_updated = _extract_last_updated(soup)
+
+            content_parts = [f"Last updated: {last_updated}"] if last_updated else []
+            for sec in sections:
+                line = sec["text"]
+                if sec.get("heading"):
+                    line = f"[{sec['heading']}] {line}"
+                content_parts.append(line)
+
+            page_external_id = hashlib.sha256(url.encode()).hexdigest()[:32]
+            results.append(
+                NormalizedPost(
+                    external_id=page_external_id,
+                    url=url,
+                    title=f"Pearson VUE — {vendor} Certification Programs",
+                    content="\n".join(content_parts),
+                    summary=f"{len(sections)} sections across {vendor} certification programs on Pearson VUE",
+                    raw_data={
+                        "scraped_from": url,
+                        "vendor": vendor,
+                        "type": "page_overview",
+                    },
+                )
+            )
 
         logger.info(
             "PearsonVUECollector: collected",
             url=url,
             vendor=vendor,
-            slide_promos=len(results) - 1,
-            sections=len(sections),
+            slide_promos=sum(
+                1
+                for r in results
+                if r.raw_data and r.raw_data.get("type") in ("slide_promo", "slide_link")
+            ),
+            promo_cards=sum(
+                1
+                for r in results
+                if r.raw_data and r.raw_data.get("type") == "promo_card"
+            ),
+            total=len(results),
         )
         return results[:limit]
