@@ -8,3 +8,21 @@
 [D] WEBSITE | website:red_hat_training_specials | 720 min | https://www.redhat.com/en/services/training/specials
 [C] WEBSITE | website:msfthub_vouchers | 240 min | https://msfthub.com/vouchers/
 [C] WEBSITE | website:vladtalkstech | 240 min | https://vladtalkstech.com/
+# ── Pearson VUE vendor pages (scraped) ────────────────────────────────────
+[C] PEARSONVUE | pearsonvue:pearson_vue_aws | 240 min | https://www.pearsonvue.com/us/en/aws.html
+[C] PEARSONVUE | pearsonvue:pearson_vue_microsoft | 240 min | https://www.pearsonvue.com/us/en/microsoft.html
+[C] PEARSONVUE | pearsonvue:pearson_vue_cisco | 240 min | https://www.pearsonvue.com/us/en/cisco.html
+[C] PEARSONVUE | pearsonvue:pearson_vue_comptia | 240 min | https://www.pearsonvue.com/us/en/comptia.html
+[C] PEARSONVUE | pearsonvue:pearson_vue_vmware_broadcom | 240 min | https://www.pearsonvue.com/us/en/broadcom.html
+[C] PEARSONVUE | pearsonvue:pearson_vue_fortinet | 240 min | https://www.pearsonvue.com/us/en/fortinet.html
+[C] PEARSONVUE | pearsonvue:pearson_vue_palo_alto_networks | 240 min | https://www.pearsonvue.com/us/en/paloaltonetworks.html
+[C] PEARSONVUE | pearsonvue:pearson_vue_salesforce | 240 min | https://www.pearsonvue.com/us/en/salesforce.html
+[C] PEARSONVUE | pearsonvue:pearson_vue_servicenow | 240 min | https://www.pearsonvue.com/us/en/servicenow.html
+[C] PEARSONVUE | pearsonvue:pearson_vue_splunk | 240 min | https://www.pearsonvue.com/us/en/splunk.html
+# ── Training provider promotion pages (scraped) ──────────────────────────
+[C] TRAINING_PROVIDER | training_provider:global_knowledge_promotions | 240 min | https://www.globalknowledge.com/en-gb/training/special-offers/promotions
+[C] TRAINING_PROVIDER | training_provider:ascendient_learning_savings | 240 min | https://www.ascendientlearning.com/it-training/savings
+[C] TRAINING_PROVIDER | training_provider:fast_lane_special_offers | 240 min | https://www.fastlaneus.com/specialoffers
+[C] TRAINING_PROVIDER | training_provider:qa_training_news | 240 min | https://www.qa.com/en-us/about/news/
+[C] TRAINING_PROVIDER | training_provider:firebrand_training_blog | 240 min | https://firebrand.training/en/blog
+[C] TRAINING_PROVIDER | training_provider:learning_tree_training_offers | 240 min | https://www.learningtree.com/training-offers/

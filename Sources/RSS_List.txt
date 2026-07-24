@@ -21,3 +21,9 @@
 [B] RSS | rss:cisco_newsroom_security | 60 min | https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json?feed=security
 [B] RSS | rss:cisco_newsroom_press | 60 min | https://newsroom.cisco.com/c/services/i/servlets/newsroom/rssfeed.json?feed=press-releases
 [D] BLOG | blog:oracle_university_blog | 720 min | https://feeds.libsyn.com/459162/rss
+[C] RSS | rss:petri_it | 240 min | https://petri.com/feed/feed
+[C] RSS | rss:infoq | 240 min | https://feed.infoq.com
+[C] RSS | rss:the_register | 240 min | https://www.theregister.com/headlines.atom
+[C] RSS | rss:techtarget_aws | 240 min | https://www.techtarget.com/searchaws/rss/News-on-amazon-web-services-trends-and-technology.xml
+[C] RSS | rss:techtarget_cloud | 240 min | https://www.techtarget.com/searchcloudcomputing/rss/Cloud-computing-news-and-technical-advice.xml
+[B] RSS | rss:certiport_exam_updates | 60 min | https://certiport.pearsonvue.com/Support/Exam-content-updates.aspx?rss=exam-content-updates

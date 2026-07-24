@@ -123,6 +123,10 @@ def _resolve_collector(
         return collectors.get("rss")
     if "article_selector" in config:
         return collectors.get("web")
+    if source.type == SourceType.PEARSONVUE:
+        return collectors.get("pearsonvue")
+    if source.type == SourceType.TRAINING_PROVIDER:
+        return collectors.get("training_provider")
     return None
 
 

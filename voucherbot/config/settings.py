@@ -39,6 +39,8 @@ class EventMatcherConfig(BaseModel):
 # source's non-null value).
 SOURCE_PRIORITY: list[str] = [
     "WEBSITE",  # official vendor / event pages
+    "PEARSONVUE",  # official Pearson VUE vendor pages
+    "TRAINING_PROVIDER",  # official training partner pages
     "EVENT",
     "BLOG",
     "RSS",
