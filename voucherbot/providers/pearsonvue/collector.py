@@ -10,23 +10,29 @@ from voucherbot.providers.http_policy import polite_get, RobotsDisallowedError
 logger = structlog.get_logger(__name__)
 
 # Keywords that signal promotional content in Pearson VUE pages.
+# Deliberately narrow: Pearson is a voucher vendor so generic terms like
+# "voucher", "save", "credit" appear on nearly every page and are not
+# reliable signals of actual promotions.
 _PROMO_KEYWORDS: list[str] = [
-    "voucher",
-    "exam voucher",
     "free exam",
     "free certification",
-    "discount",
     "% off",
-    "save",
-    "sale",
     "special offer",
-    "promotion",
-    "promo",
-    "deal",
     "coupon",
     "complimentary",
     "no cost",
-    "credit",
+    "promo code",
+    "exam discount",
+    "limited time",
+    "buy one get one",
+    "bogo",
+    "giveaway",
+    "reduced price",
+    "early bird",
+    "earn",
+    "reward",
+    "off",
+    "voucher",
 ]
 
 # CSS selectors for promotion card containers on Pearson VUE pages.

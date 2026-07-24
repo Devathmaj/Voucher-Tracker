@@ -322,6 +322,14 @@ def _merge_fields(
         if incoming_val is None:
             continue  # nothing to contribute
 
+        # Date fields arrive as ISO strings from the AI; convert to datetime.
+        if field in ("start_date", "end_date") and isinstance(incoming_val, str):
+            try:
+                dt = datetime.fromisoformat(incoming_val)
+                incoming_val = dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue  # skip unparseable dates
+
         existing_val = getattr(event, field, None)
 
         if existing_val is None:
