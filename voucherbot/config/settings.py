@@ -18,18 +18,29 @@ class EventMatcherConfig(BaseModel):
     # --- Scoring weights ---
     weight_registration_url: int = 50
     weight_voucher_code: int = 40
-    weight_promotion_name: int = 20
-    weight_vendor: int = 15
+    weight_promotion_name: int = 25
+    weight_vendor: int = 20
+    weight_discount: int = 20
+    weight_promotion_type: int = 10
     weight_certifications: int = 15
     weight_date_overlap: int = 10
 
     # --- Thresholds ---
-    auto_merge_threshold: int = 75
-    possible_match_threshold: int = 60
+    auto_merge_threshold: int = 70
+    possible_match_threshold: int = 45
+
+    # --- Candidate retrieval ---
+    candidate_limit: int = 100
 
     # --- Promotion-name similarity cutoff (0–1) for partial weight credit ---
     # Below this similarity the name score contributes 0, at or above it
     # contributes the full weight_promotion_name value.
+    #
+    # Set to 0.60 — conservative enough to avoid false matches between
+    # generic names like "Student Discount" vs "Certification Discount"
+    # (~0.58 similarity), while still matching the intended examples:
+    #   "Microsoft Virtual Training Days"   vs "Virtual Training Days"       (~0.81)
+    #   "Microsoft Fabric Data Days"        vs "Fabric Data Days"            (~0.76)
     name_similarity_threshold: float = 0.60
 
 

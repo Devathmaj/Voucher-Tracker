@@ -370,9 +370,14 @@ async def _process_one_source(
                 continue
 
             # ── Stage 3: Canonical Event Matching ─────────────────────────────
-            _event, confidence = await _event_matcher.match_or_create(
-                db, extracted, db_post, source.type
-            )
+            if db_post.event_id is not None:
+                _event, confidence = await _event_matcher.update_existing(
+                    db, extracted, db_post, source.type
+                )
+            else:
+                _event, confidence = await _event_matcher.match_or_create(
+                    db, extracted, db_post, source.type
+                )
             db_post.status = PostStatus.PROCESSED
 
             if confidence == MatchConfidence.NEW:
@@ -382,8 +387,8 @@ async def _process_one_source(
             else:
                 stats["events_attached"] += 1
 
-            # Notify on new posts and on updated posts (content changed).
-            if confidence != MatchConfidence.AUTO_MERGED:
+            # Notify on new posts and on possible matches (not for auto-merge or updates).
+            if confidence not in (MatchConfidence.AUTO_MERGED, MatchConfidence.UPDATED):
                 pending_notifications.append((db_post, extracted))
 
     # ── Finalise ──────────────────────────────────────────────────────────────

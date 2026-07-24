@@ -16,14 +16,16 @@ Configured via ``settings.event_matcher`` (an ``EventMatcherConfig`` instance):
   ──────────────────────────────────────────
   registration_url         +50   (exact normalised URL match)
   voucher_code             +40   (exact, case-normalised)
-  promotion_name           +20   (token-overlap similarity >= name_threshold)
-  vendor                   +15   (exact, lower-cased)
+  promotion_name           +25   (token-overlap similarity >= name_threshold)
+  vendor                   +20   (exact, lower-cased)
+  discount                 +20   (normalised value + type, see ``_discounts_match``)
+  promotion_type           +10   (exact, normalised text match)
   certifications           +15   (at least one cert in common)
   date_overlap             +10   (date ranges overlap or are both absent)
 
 Score bands (configurable thresholds):
-  >= auto_merge_threshold (75)         → attach to existing Event
-  >= possible_match_threshold (60)     → flag as POSSIBLE_MATCH (future review)
+  >= auto_merge_threshold (70)         → attach to existing Event
+  >= possible_match_threshold (45)     → flag as POSSIBLE_MATCH (future review)
   <  possible_match_threshold          → create a new Event
 
 Source Priority & Field Merging
@@ -44,6 +46,7 @@ provenance.
 from __future__ import annotations
 
 import difflib
+import re
 from datetime import datetime, timezone
 from typing import Optional, Any
 
@@ -86,6 +89,83 @@ def _source_priority(source_type: SourceType) -> int:
         return SOURCE_PRIORITY.index(source_type.value)
     except ValueError:
         return len(SOURCE_PRIORITY)  # unknown sources get lowest priority
+
+
+def _normalise_text(value: Optional[str]) -> str:
+    """Lower-case and collapse whitespace for stable field comparison."""
+    if not value:
+        return ""
+    return re.sub(r"\s+", " ", value.strip().lower())
+
+
+def _text_fields_match(a: Optional[str], b: Optional[str]) -> bool:
+    if not a or not b:
+        return False
+    return _normalise_text(a) == _normalise_text(b)
+
+
+def _normalize_discount(discount: Optional[str]) -> Optional[tuple[float, str]]:
+    """Normalize a discount string to a comparable (value, type) pair.
+
+    Returns ``(value, 'percent')`` for percentage-based discounts,
+    ``(value, 'absolute')`` for fixed-amount discounts, or ``None``
+    when the discount cannot be parsed.
+
+    Equivalent representations such as ``"50%"``, ``"50 %"``,
+    ``"50 percent"``, and ``"50% exam voucher"`` all normalise to
+    ``(50.0, 'percent')``.
+    """
+    if not discount:
+        return None
+
+    text = discount.strip().lower()
+
+    # "free" / "complimentary" / "no cost"
+    if text in ("free", "complimentary", "no cost"):
+        return (100.0, "percent")
+
+    # Percentage patterns:
+    #   "50%", "50 %", "50 percent", "50% off", "save 50%"
+    m = re.search(
+        r"(?:save\s+)?(\d+(?:\.\d+)?)\s*%\s*(?:off|discount)?"
+        r"|(\d+(?:\.\d+)?)\s*percent\s*(?:off|discount)?",
+        text,
+    )
+    if m:
+        return (float(m.group(1) or m.group(2)), "percent")
+
+    # Absolute dollar amount: "$100", "$ 100 off"
+    m = re.search(r"\$\s*(\d+(?:\.\d+)?)(?:\s+off|\s+discount)?", text)
+    if m:
+        return (float(m.group(1)), "absolute")
+
+    # Absolute amount: "100 USD", "100 dollars"
+    m = re.search(
+        r"(\d+(?:\.\d+)?)\s*(?:usd|dollars?)\s*(?:off|discount)?", text
+    )
+    if m:
+        return (float(m.group(1)), "absolute")
+
+    return None
+
+
+def _discounts_match(a: Optional[str], b: Optional[str]) -> bool:
+    """Compare discounts by normalised (value, type) pair, fall back to text.
+
+    ``"50%"``, ``"50 %"``, ``"50 percent"`` and ``"50% exam voucher"``
+    all normalise to ``(50.0, 'percent')`` → **match**.
+
+    Different types (percent vs absolute) never match, so ``"50%"``
+    and ``"$50"`` are treated as different discounts.
+
+    Falls back to exact normalised-text comparison when either side
+    cannot be parsed (e.g. ``"Free"`` vs ``"Free"``).
+    """
+    na = _normalize_discount(a)
+    nb = _normalize_discount(b)
+    if na is not None and nb is not None:
+        return na == nb
+    return _text_fields_match(a, b)
 
 
 def _name_similarity(a: Optional[str], b: Optional[str]) -> float:
@@ -169,17 +249,48 @@ def _score_candidate(event: Event, extracted: ExtractedEvent) -> int:
     if sim >= cfg.name_similarity_threshold:
         score += cfg.weight_promotion_name
 
-    # 5. certifications — at least one in common
+    # 5. discount — numeric normalised match (e.g. "50%" == "50 %" == "50 percent")
+    if _discounts_match(event.discount, extracted.discount):
+        score += cfg.weight_discount
+
+    # 6. promotion_type — exact normalised match
+    if _text_fields_match(event.promotion_type, extracted.promotion_type):
+        score += cfg.weight_promotion_type
+
+    # 7. certifications — at least one in common
     if _certs_overlap(event.certifications, extracted.certifications):
         score += cfg.weight_certifications
 
-    # 6. date overlap
+    # 8. date overlap
     if _dates_overlap(
         event.start_date, event.end_date, extracted.start_date, extracted.end_date
     ):
         score += cfg.weight_date_overlap
 
     return score
+
+
+def _candidate_relevance(event: Event, extracted: ExtractedEvent) -> int:
+    """Quick pre-score used to rank candidates before the full limit is applied."""
+    relevance = 0
+    if event.vendor and extracted.vendor:
+        if event.vendor.lower() == extracted.vendor.lower():
+            relevance += 3
+    if _discounts_match(event.discount, extracted.discount):
+        relevance += 2
+    if _text_fields_match(event.promotion_type, extracted.promotion_type):
+        relevance += 1
+    if _name_similarity(event.promotion_name, extracted.promotion_name) >= 0.5:
+        relevance += 2
+    if event.voucher_code and extracted.voucher_code:
+        if event.voucher_code.upper() == extracted.voucher_code.upper():
+            relevance += 3
+    if event.registration_url and extracted.registration_url:
+        if normalise_url(event.registration_url) == normalise_url(
+            extracted.registration_url
+        ):
+            relevance += 3
+    return relevance
 
 
 def _merge_fields(
@@ -191,6 +302,16 @@ def _merge_fields(
     match_confidence: MatchConfidence,
 ) -> list[str]:
     """Merge non-null fields from ``extracted`` into ``event`` using source priority.
+
+    Merge rules (in order):
+    1. Null incoming values are **never** written (preserves existing data).
+    2. Null existing values are **backfilled** from the incoming data regardless
+       of source priority (fills missing fields).
+    3. When both values are present, the source with **higher priority** (lower
+       ``SOURCE_PRIORITY`` index) wins.  The priority that last wrote the field
+       is determined by walking the ``merge_log`` in reverse (most recent first).
+    4. Fields are never blindly overwritten — a lower-priority source cannot
+       replace a value set by a higher-priority source.
 
     Returns a list of field names that were actually updated.
     Updates event.merge_log with an audit entry.
@@ -303,11 +424,17 @@ class EventMatcher:
     async def _find_candidates(
         self, db: AsyncSession, extracted: ExtractedEvent
     ) -> list[Event]:
-        """Retrieve a small set of candidate Events to score against.
+        """Retrieve candidate Events to score against.
 
         Uses indexed columns (registration_url, voucher_code, vendor) to avoid
-        a full-table scan.  Only ACTIVE events are considered.
+        a full-table scan when possible.  When those are absent, falls back to
+        token-based promotion_name matching so that likely matches are not
+        excluded simply because the post lacks dense structured data.
+
+        Only ACTIVE events are considered.  Results are ranked by a lightweight
+        relevance heuristic so the most likely matches are evaluated first.
         """
+        cfg = settings.event_matcher
         filters = []
         if extracted.registration_url:
             filters.append(Event.registration_url == extracted.registration_url)
@@ -317,15 +444,96 @@ class EventMatcher:
             filters.append(Event.vendor == extracted.vendor.lower())
 
         if not filters:
-            return []
+            # Without indexed fields use promotion_name token matching.
+            if not extracted.promotion_name:
+                # Last resort: fetch recent events to score against.
+                #
+                # Safety: this only *expands the candidate pool* — every
+                # candidate still goes through the full scoring logic
+                # (``_score_candidate``) and must reach the configured
+                # thresholds (45 / 70) before any merge happens.  When the
+                # extracted event has no vendor, URL, code, or name, the
+                # scores will be very low (at most 10 for absent dates) so
+                # no false-positive merge is possible.
+                result = await db.execute(
+                    select(Event)
+                    .where(Event.status == EventStatus.ACTIVE)
+                    .order_by(Event.created_at.desc())
+                    .limit(cfg.candidate_limit)
+                )
+                candidates = list(result.scalars().all())
+                candidates.sort(
+                    key=lambda event: _candidate_relevance(event, extracted),
+                    reverse=True,
+                )
+                return candidates[: cfg.candidate_limit]
+            tokens = [
+                re.sub(r"[^\w]", "", t).lower()
+                for t in extracted.promotion_name.split()
+                if len(t) > 2
+            ]
+            tokens = [t for t in tokens if len(t) > 2]
+            if tokens:
+                for token in tokens[:5]:
+                    filters.append(Event.promotion_name.ilike(f"%{token}%"))
+            if not filters:
+                return []
 
         result = await db.execute(
             select(Event)
             .where(Event.status == EventStatus.ACTIVE)
             .where(or_(*filters))
-            .limit(20)
+            .limit(cfg.candidate_limit * 3)
         )
-        return list(result.scalars().all())
+        candidates = list(result.scalars().all())
+        candidates.sort(
+            key=lambda event: _candidate_relevance(event, extracted),
+            reverse=True,
+        )
+        return candidates[: cfg.candidate_limit]
+
+    async def update_existing(
+        self,
+        db: AsyncSession,
+        extracted: ExtractedEvent,
+        post: Post,
+        source_type: SourceType,
+    ) -> tuple[Event, MatchConfidence]:
+        """Merge extracted fields into a post's existing Event without re-matching.
+
+        Used when a post is reprocessed after its content changes.  Preserves
+        ``post.event_id`` and never creates a new canonical Event.
+        """
+        if post.event_id is None:
+            raise ValueError("post has no event_id")
+
+        result = await db.execute(select(Event).where(Event.id == post.event_id))
+        event = result.scalars().first()
+        if event is None:
+            logger.warning(
+                "event_matcher: post event_id points to missing event, re-matching",
+                post_id=post.id,
+                event_id=post.event_id,
+            )
+            return await self.match_or_create(db, extracted, post, source_type)
+
+        score = _score_candidate(event, extracted)
+        updated = _merge_fields(
+            event,
+            extracted,
+            source_type,
+            post.id,
+            score,
+            MatchConfidence.UPDATED,
+        )
+        logger.info(
+            "event_matcher: updated existing event for reprocessed post",
+            event_id=event.id,
+            post_id=post.id,
+            score=score,
+            fields_updated=updated,
+        )
+        return event, MatchConfidence.UPDATED
 
     async def match_or_create(
         self,
