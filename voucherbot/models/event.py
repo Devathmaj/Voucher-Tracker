@@ -35,6 +35,7 @@ class MatchConfidence(enum.Enum):
     POSSIBLE_MATCH = (
         "POSSIBLE_MATCH"  # score in [possible_match_threshold, auto_merge_threshold)
     )
+    UPDATED = "UPDATED"  # reprocessed post enriched its already-linked event
     NEW = "NEW"  # score below possible_match_threshold → new event
 
 

@@ -16,6 +16,8 @@ class SourceType(enum.Enum):
     FORUM = "FORUM"
     WEBSITE = "WEBSITE"
     API = "API"
+    PEARSONVUE = "PEARSONVUE"
+    TRAINING_PROVIDER = "TRAINING_PROVIDER"
 
 
 class Source(Base):

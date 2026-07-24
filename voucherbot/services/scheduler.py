@@ -22,6 +22,8 @@ from voucherbot.providers.reddit.client import RedditClient
 from voucherbot.providers.reddit.collector import RedditCollector
 from voucherbot.providers.rss.collector import RssCollector
 from voucherbot.providers.website.collector import WebsiteCollector
+from voucherbot.providers.pearsonvue.collector import PearsonVUECollector
+from voucherbot.providers.training_provider.collector import TrainingProviderCollector
 from voucherbot.services.dispatcher import dispatch_tick
 
 logger = structlog.get_logger(__name__)
@@ -31,6 +33,8 @@ _collectors = {
     "reddit": RedditCollector(_reddit_client),
     "rss": RssCollector(),
     "web": WebsiteCollector(),
+    "pearsonvue": PearsonVUECollector(),
+    "training_provider": TrainingProviderCollector(),
 }
 
 _loop_task: asyncio.Task[Any] | None = None
