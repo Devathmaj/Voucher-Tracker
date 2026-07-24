@@ -460,7 +460,7 @@ def main():
         result = scrape_source(name, config)
 
         if result.get("error"):
-            print(f"   ❌ Failed to fetch")
+            print("   ❌ Failed to fetch")
         else:
             count = result["total_items"]
             hits = len(result["relevant"])
@@ -479,7 +479,7 @@ def main():
 
     total = sum(len(r["relevant"]) for r in results)
     print(f"\n{'─' * 60}")
-    print(f"💾 Saved vendor_academies.json")
+    print("💾 Saved vendor_academies.json")
     print(f"🎯 {total} total relevant items across all sources")
 
     # Print Website_List.txt entries to add

@@ -1,7 +1,6 @@
 from typing import Any
 import asyncio
 import hashlib
-import re
 import structlog
 from bs4 import BeautifulSoup, Tag
 
