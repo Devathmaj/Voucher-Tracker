@@ -52,9 +52,7 @@ BROWSER_UA = (
 # ─────────────────────────────────────────────────────────────────────────────
 
 SOURCES = {
-
     # ── VENDOR ACADEMIES ─────────────────────────────────────────────────────
-
     "AWS Training Events": {
         # Free training events often include exam vouchers for attendees
         # This is the dedicated events page, distinct from the main /training/ hub
@@ -63,7 +61,6 @@ SOURCES = {
         "tier": "C",
         "poll_min": 240,
     },
-
     "Red Hat Training Specials": {
         # Drupal static page — h3 + p blocks per promo. Currently shows
         # 15% referral discount. Clean scrape, no JS needed.
@@ -72,7 +69,6 @@ SOURCES = {
         "tier": "C",
         "poll_min": 240,
     },
-
     "Databricks Certification": {
         # Static index page. Free accreditation exams for customers/partners
         # mentioned inline. Worth scanning for "free" keyword hits.
@@ -81,24 +77,20 @@ SOURCES = {
         "tier": "D",
         "poll_min": 720,
     },
-
     # ── SKIPPED (confirmed JS-only or no static promo surface) ───────────────
     # IBM Training      → Full SPA, nothing renders without JS
     # Broadcom/VMware   → JS-rendered, no static promo content
     # Google Cloud Skills Boost → login-gated
     # Cisco U           → login-gated
     # Oracle University → homepage banner only, low signal
-
     # ── EVENT PLATFORMS ──────────────────────────────────────────────────────
-
-# In SOURCES dict:
+    # In SOURCES dict:
     "Snowflake SnowPro Blog": {
         "url": "https://www.snowflake.com/en/blog/authors/snowpro-certification-team/",
-        "extractor": "snowflake_blog",   # ← was "generic_cards"
+        "extractor": "snowflake_blog",  # ← was "generic_cards"
         "tier": "D",
         "poll_min": 720,
     },
-
     "Sessionize User Groups": {
         "url": "https://sessionize.com/user-groups/",
         "extractor": "sessionize_usergroups",  # ← was "sessionize_cfp"
@@ -112,17 +104,33 @@ SOURCES = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 VOUCHER_KEYWORDS = [
-    "voucher", "free exam", "free certification", "beta exam",
-    "discount", "promo", "promotion", "retake", "% off",
-    "no cost", "complimentary", "exam credit", "free trial",
-    "sponsored", "free access", "free badge", "waived",
-    "free training", "free course", "free voucher",
+    "voucher",
+    "free exam",
+    "free certification",
+    "beta exam",
+    "discount",
+    "promo",
+    "promotion",
+    "retake",
+    "% off",
+    "no cost",
+    "complimentary",
+    "exam credit",
+    "free trial",
+    "sponsored",
+    "free access",
+    "free badge",
+    "waived",
+    "free training",
+    "free course",
+    "free voucher",
 ]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HTTP
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def fetch(url: str) -> requests.Response | None:
     try:
@@ -148,6 +156,7 @@ def strip_boilerplate(soup: BeautifulSoup) -> BeautifulSoup:
 # ─────────────────────────────────────────────────────────────────────────────
 # EXTRACTORS
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def extract_aws_events(soup: BeautifulSoup) -> list[dict]:
     """
@@ -194,7 +203,10 @@ def extract_redhat_specials(soup: BeautifulSoup) -> list[dict]:
         if not title or len(title) < 5:
             continue
         # Skip section titles that are nav/structural
-        if any(skip in title.lower() for skip in ["skip to", "menu", "search", "navigation"]):
+        if any(
+            skip in title.lower()
+            for skip in ["skip to", "menu", "search", "navigation"]
+        ):
             continue
 
         # Collect paragraph siblings until next heading
@@ -213,11 +225,13 @@ def extract_redhat_specials(soup: BeautifulSoup) -> list[dict]:
         if url.startswith("/"):
             url = "https://www.redhat.com" + url
 
-        items.append({
-            "title": title,
-            "description": " ".join(desc_parts[:3]),  # first 3 paras
-            "url": url,
-        })
+        items.append(
+            {
+                "title": title,
+                "description": " ".join(desc_parts[:3]),  # first 3 paras
+                "url": url,
+            }
+        )
 
     return items
 
@@ -234,7 +248,11 @@ def extract_sessionize_cfp(soup: BeautifulSoup) -> list[dict]:
 
     # Sessionize CFP cards use article elements or divs with class patterns
     # Try article first, then fall back to heading-based scan
-    cards = soup.select("article") or soup.select("[class*='event']") or soup.select("[class*='card']")
+    cards = (
+        soup.select("article")
+        or soup.select("[class*='event']")
+        or soup.select("[class*='card']")
+    )
 
     if cards:
         for card in cards:
@@ -283,6 +301,7 @@ def extract_generic_cards(soup: BeautifulSoup) -> list[dict]:
         items.append({"title": title, "description": desc, "url": url})
 
     return items
+
 
 def extract_snowflake_blog(soup: BeautifulSoup) -> list[dict]:
     """
@@ -354,40 +373,46 @@ def extract_sessionize_usergroups(soup: BeautifulSoup) -> list[dict]:
         # Also grab CFP status from <ul> items for keyword matching
         meta = " ".join(li.get_text(strip=True) for li in section.find_all("li"))
 
-        items.append({
-            "title": title,
-            "description": desc,
-            "meta": meta,
-            "url": url,
-        })
+        items.append(
+            {
+                "title": title,
+                "description": desc,
+                "meta": meta,
+                "url": url,
+            }
+        )
 
     return items
 
 
 EXTRACTORS = {
-    "aws_events":             extract_aws_events,
-    "redhat_specials":        extract_redhat_specials,
-    "snowflake_blog":         extract_snowflake_blog,        # ← new
-    "sessionize_usergroups":  extract_sessionize_usergroups, # ← new
-    "generic_cards":          extract_generic_cards,
+    "aws_events": extract_aws_events,
+    "redhat_specials": extract_redhat_specials,
+    "snowflake_blog": extract_snowflake_blog,  # ← new
+    "sessionize_usergroups": extract_sessionize_usergroups,  # ← new
+    "generic_cards": extract_generic_cards,
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # RELEVANCE
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def is_relevant(item: dict) -> bool:
-    text = " ".join([
-        item.get("title", ""),
-        item.get("description", ""),
-        item.get("meta", ""),        # ← add this
-    ]).lower()
+    text = " ".join(
+        [
+            item.get("title", ""),
+            item.get("description", ""),
+            item.get("meta", ""),  # ← add this
+        ]
+    ).lower()
     return any(kw in text for kw in VOUCHER_KEYWORDS)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN SCRAPER
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def scrape_source(name: str, config: dict) -> dict:
     url = config["url"]
@@ -396,8 +421,11 @@ def scrape_source(name: str, config: dict) -> dict:
     resp = fetch(url)
     if not resp:
         return {
-            "source": name, "url": url, "error": True,
-            "items": [], "relevant": [],
+            "source": name,
+            "url": url,
+            "error": True,
+            "items": [],
+            "relevant": [],
         }
 
     if resp.url != url:
@@ -409,16 +437,16 @@ def scrape_source(name: str, config: dict) -> dict:
     relevant = [i for i in items if is_relevant(i)]
 
     return {
-        "source":      name,
-        "url":         url,
-        "final_url":   resp.url,
-        "scraped_at":  datetime.now(timezone.utc).isoformat(),
-        "tier":        config.get("tier", "D"),
-        "poll_min":    config.get("poll_min", 720),
-        "hash":        content_hash,
+        "source": name,
+        "url": url,
+        "final_url": resp.url,
+        "scraped_at": datetime.now(timezone.utc).isoformat(),
+        "tier": config.get("tier", "D"),
+        "poll_min": config.get("poll_min", 720),
+        "hash": content_hash,
         "total_items": len(items),
-        "items":       items,
-        "relevant":    relevant,
+        "items": items,
+        "relevant": relevant,
     }
 
 
@@ -435,8 +463,8 @@ def main():
             print(f"   ❌ Failed to fetch")
         else:
             count = result["total_items"]
-            hits  = len(result["relevant"])
-            flag  = "🎯" if hits else "  "
+            hits = len(result["relevant"])
+            flag = "🎯" if hits else "  "
             print(f"   {flag} {count} items, {hits} relevant")
             for item in result["relevant"]:
                 print(f"      → {item['title'][:80]}")
@@ -450,16 +478,18 @@ def main():
         json.dump(results, f, indent=2, ensure_ascii=False)
 
     total = sum(len(r["relevant"]) for r in results)
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print(f"💾 Saved vendor_academies.json")
     print(f"🎯 {total} total relevant items across all sources")
 
     # Print Website_List.txt entries to add
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print("📋 Entries to add to Website_List.txt:\n")
     for name, cfg in SOURCES.items():
         db_name = "website:" + name.lower().replace(" ", "_")
-        print(f"[{cfg['tier']}] WEBSITE | {db_name} | {cfg['poll_min']} min | {cfg['url']}")
+        print(
+            f"[{cfg['tier']}] WEBSITE | {db_name} | {cfg['poll_min']} min | {cfg['url']}"
+        )
 
 
 if __name__ == "__main__":

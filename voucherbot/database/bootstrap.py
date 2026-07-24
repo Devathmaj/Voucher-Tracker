@@ -820,7 +820,9 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
     },
     # ── Training provider promotion pages ─────────────────────────────────
     {
-        "name": _source_name(SourceType.TRAINING_PROVIDER, "Global Knowledge Promotions"),
+        "name": _source_name(
+            SourceType.TRAINING_PROVIDER, "Global Knowledge Promotions"
+        ),
         "type": SourceType.TRAINING_PROVIDER,
         "base_url": "https://www.globalknowledge.com/en-gb/training/special-offers/promotions",
         "priority": 2,
@@ -835,7 +837,9 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": _source_name(SourceType.TRAINING_PROVIDER, "Ascendient Learning Savings"),
+        "name": _source_name(
+            SourceType.TRAINING_PROVIDER, "Ascendient Learning Savings"
+        ),
         "type": SourceType.TRAINING_PROVIDER,
         "base_url": "https://www.ascendientlearning.com/it-training/savings",
         "priority": 2,
@@ -895,7 +899,9 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": _source_name(SourceType.TRAINING_PROVIDER, "Learning Tree Training Offers"),
+        "name": _source_name(
+            SourceType.TRAINING_PROVIDER, "Learning Tree Training Offers"
+        ),
         "type": SourceType.TRAINING_PROVIDER,
         "base_url": "https://www.learningtree.com/training-offers/",
         "priority": 2,

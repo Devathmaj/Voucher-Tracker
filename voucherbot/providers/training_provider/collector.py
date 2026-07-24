@@ -11,6 +11,7 @@ logger = structlog.get_logger(__name__)
 
 # ── Per-site extractors ──────────────────────────────────────────────────
 
+
 def _extract_gk(soup: BeautifulSoup) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     main = soup.find("main") or soup.find("body")
@@ -19,8 +20,13 @@ def _extract_gk(soup: BeautifulSoup) -> list[dict[str, Any]]:
         if any(
             skip in href
             for skip in [
-                "/training/courses", "/certifications", "/contact",
-                "/company", "/solutions", "/legal", "/account",
+                "/training/courses",
+                "/certifications",
+                "/contact",
+                "/company",
+                "/solutions",
+                "/legal",
+                "/account",
             ]
         ):
             continue
@@ -71,8 +77,13 @@ def _extract_generic_cards(soup: BeautifulSoup) -> list[dict[str, Any]]:
         tag.decompose()
 
     card_selectors = [
-        "article", ".card", ".offer", ".promo",
-        ".promotion", "[class*='card']", "[class*='offer']",
+        "article",
+        ".card",
+        ".offer",
+        ".promo",
+        ".promotion",
+        "[class*='card']",
+        "[class*='offer']",
         "[class*='promo']",
     ]
     cards: list[Any] = []

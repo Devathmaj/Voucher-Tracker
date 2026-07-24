@@ -140,9 +140,7 @@ def _normalize_discount(discount: Optional[str]) -> Optional[tuple[float, str]]:
         return (float(m.group(1)), "absolute")
 
     # Absolute amount: "100 USD", "100 dollars"
-    m = re.search(
-        r"(\d+(?:\.\d+)?)\s*(?:usd|dollars?)\s*(?:off|discount)?", text
-    )
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(?:usd|dollars?)\s*(?:off|discount)?", text)
     if m:
         return (float(m.group(1)), "absolute")
 

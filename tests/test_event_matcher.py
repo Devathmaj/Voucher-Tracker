@@ -298,7 +298,11 @@ class TestNameSimilarity:
             ("Microsoft Fabric Data Days", "Fabric Data Days", 0.60),
             ("Virtual Training Days", "Microsoft Virtual Training Days", 0.60),
             ("AI Skills Fest", "Azure AI Skills Fest", 0.60),
-            ("Microsoft Virtual Training Days", "Microsoft Azure Virtual Training Days", 0.55),
+            (
+                "Microsoft Virtual Training Days",
+                "Microsoft Azure Virtual Training Days",
+                0.55,
+            ),
             ("50% Off Azure Exam", "Azure Exam 50% Off", 0.40),
         ],
     )

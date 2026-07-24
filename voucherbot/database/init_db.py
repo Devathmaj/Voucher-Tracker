@@ -32,9 +32,7 @@ async def _ensure_source_type_enum() -> None:
 
         for val in _NEW_ENUM_VALUES:
             if val not in existing:
-                await conn.execute(
-                    text(f"ALTER TYPE sourcetype ADD VALUE '{val}'")
-                )
+                await conn.execute(text(f"ALTER TYPE sourcetype ADD VALUE '{val}'"))
                 await conn.commit()
 
 

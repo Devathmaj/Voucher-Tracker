@@ -12,19 +12,40 @@ logger = structlog.get_logger(__name__)
 
 # Keywords that signal promotional content in Pearson VUE pages.
 _PROMO_KEYWORDS: list[str] = [
-    "voucher", "exam voucher", "free exam", "free certification",
-    "discount", "% off", "save", "sale", "special offer",
-    "promotion", "promo", "deal", "coupon",
-    "complimentary", "no cost", "credit",
+    "voucher",
+    "exam voucher",
+    "free exam",
+    "free certification",
+    "discount",
+    "% off",
+    "save",
+    "sale",
+    "special offer",
+    "promotion",
+    "promo",
+    "deal",
+    "coupon",
+    "complimentary",
+    "no cost",
+    "credit",
 ]
 
 # CSS selectors for promotion card containers on Pearson VUE pages.
 _CARD_SELECTORS: list[str] = [
-    ".promo-section", ".offer-section", ".special-offer",
-    ".promo-card", ".offer-card", ".deal-card",
-    ".promotion", ".offer", ".promo", ".card",
-    "[class*='promo']", "[class*='offer']",
-    "[class*='voucher']", "[class*='deal']",
+    ".promo-section",
+    ".offer-section",
+    ".special-offer",
+    ".promo-card",
+    ".offer-card",
+    ".deal-card",
+    ".promotion",
+    ".offer",
+    ".promo",
+    ".card",
+    "[class*='promo']",
+    "[class*='offer']",
+    "[class*='voucher']",
+    "[class*='deal']",
     "article",
 ]
 
@@ -372,7 +393,8 @@ class PearsonVUECollector(BaseCollector):
             slide_promos=sum(
                 1
                 for r in results
-                if r.raw_data and r.raw_data.get("type") in ("slide_promo", "slide_link")
+                if r.raw_data
+                and r.raw_data.get("type") in ("slide_promo", "slide_link")
             ),
             promo_cards=sum(
                 1
