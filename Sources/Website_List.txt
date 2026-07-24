@@ -26,3 +26,4 @@
 [C] TRAINING_PROVIDER | training_provider:qa_training_news | 240 min | https://www.qa.com/en-us/about/news/
 [C] TRAINING_PROVIDER | training_provider:firebrand_training_blog | 240 min | https://firebrand.training/en/blog
 [C] TRAINING_PROVIDER | training_provider:learning_tree_training_offers | 240 min | https://www.learningtree.com/training-offers/
+[B] WEBSITE | website:linux_foundation_promotions | 60 min | https://training.linuxfoundation.org/?section=promotions

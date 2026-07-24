@@ -305,6 +305,28 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         vendor="Microsoft",
         priority=2,
     ),
+    _feed(
+        "Microsoft Azure Blog",
+        "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=Azure",
+        SourceType.BLOG,
+        vendor="Microsoft",
+        priority=2,
+    ),
+    _feed(
+        "Microsoft Security Blog",
+        "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=microsoft-security-blog",
+        SourceType.BLOG,
+        vendor="Microsoft",
+        priority=2,
+    ),
+    _feed(
+        "Microsoft AI Platform Blog",
+        "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/Community?interaction.style=blog",
+        SourceType.BLOG,
+        vendor="Microsoft",
+        priority=2,
+        note="board.id=AIPlatformBlog is broken (returns 'Resource Not Found'). Using Community endpoint as fallback.",
+    ),
     # Aggregator blogs (Tier C).
     _feed(
         "Tutorials Dojo",
@@ -544,6 +566,40 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         "https://certiport.pearsonvue.com/Support/Exam-content-updates.aspx?rss=exam-content-updates",
         SourceType.RSS,
         vendor="Certiport",
+        priority_tier="B",
+        priority=2,
+    ),
+    # ── New vendor feeds (Databricks, HashiCorp, LF) ─────────────────────
+    _feed(
+        "Databricks Learning Events",
+        "https://community.databricks.com/rss/board?board.id=databricks-community-events",
+        SourceType.RSS,
+        vendor="Databricks",
+        priority_tier="C",
+        priority=2,
+    ),
+    _feed(
+        "HashiCorp Blog",
+        "https://www.hashicorp.com/blog/feed.xml",
+        SourceType.BLOG,
+        vendor="HashiCorp",
+        priority_tier="C",
+        priority=2,
+    ),
+    _feed(
+        "Linux Foundation Training Blog",
+        "https://training.linuxfoundation.org/feed/",
+        SourceType.BLOG,
+        vendor="Linux Foundation",
+        priority_tier="B",
+        priority=2,
+    ),
+    _page(
+        "Linux Foundation Promotions",
+        "https://training.linuxfoundation.org/?section=promotions",
+        SourceType.WEBSITE,
+        vendor="Linux Foundation",
+        article_selector="main .promotion, article, .card",
         priority_tier="B",
         priority=2,
     ),
@@ -919,6 +975,21 @@ VENDOR_MAPPINGS: list[dict[str, str | None]] = [
     },
     {
         "url_pattern": None,
+        "source_name_pattern": "microsoft azure blog",
+        "vendor": "microsoft",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "microsoft security blog",
+        "vendor": "microsoft",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "microsoft ai platform blog",
+        "vendor": "microsoft",
+    },
+    {
+        "url_pattern": None,
         "source_name_pattern": "google cloud",
         "vendor": "google cloud",
     },
@@ -1067,6 +1138,42 @@ VENDOR_MAPPINGS: list[dict[str, str | None]] = [
         "url_pattern": "https://certiport.pearsonvue.com/",
         "source_name_pattern": None,
         "vendor": "certiport",
+    },
+    # ── New vendor mappings (Databricks, HashiCorp, LF) ──────────────────
+    {
+        "url_pattern": "https://community.databricks.com/",
+        "source_name_pattern": None,
+        "vendor": "databricks",
+    },
+    {
+        "url_pattern": "https://www.hashicorp.com/",
+        "source_name_pattern": None,
+        "vendor": "hashicorp",
+    },
+    {
+        "url_pattern": "https://training.linuxfoundation.org/",
+        "source_name_pattern": None,
+        "vendor": "linux foundation",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "databricks",
+        "vendor": "databricks",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "hashicorp",
+        "vendor": "hashicorp",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "linux foundation training",
+        "vendor": "linux foundation",
+    },
+    {
+        "url_pattern": None,
+        "source_name_pattern": "linux foundation promotions",
+        "vendor": "linux foundation",
     },
 ]
 
