@@ -24,6 +24,7 @@
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
 - [🎯 Goals](#-goals)
+- [🌐 Live Preview](#-live-preview)
 
 ---
 
@@ -100,7 +101,7 @@ Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for 
 
 ## 📄 License
 
-This project is licensed under the terms described in [LICENSE](./LICENSE).
+This project is licensed under the **Apache License 2.0**. See [LICENSE](./LICENSE) for the full terms.
 
 ---
 
@@ -111,3 +112,13 @@ This project is licensed under the terms described in [LICENSE](./LICENSE).
 - 🎯 **Minimize false positives** using AI-assisted filtering.
 - 🔔 **Provide timely notifications** for new certification opportunities.
 - 🧩 **Offer an extensible platform** that supports additional providers with minimal development effort.
+
+---
+
+## 🌐 Live Preview
+
+Curious what VoucherBot actually finds? A selection of vouchers and certification offers collected by the bot is publicly displayed at:
+
+👉 **[voucherbot-preview.pages.dev](https://voucherbot-preview.pages.dev/)**
+
+Feel free to browse through it and see the kind of deals VoucherBot surfaces — no setup required.

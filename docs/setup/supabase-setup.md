@@ -21,7 +21,8 @@ This guide will help you create and configure a **Supabase PostgreSQL database**
 7. [Copy Your Connection String](#copy-your-connection-string)
 8. [Passwords with Special Characters](#️-passwords-with-special-characters)
 9. [Configure the Project](#-configure-the-project)
-10. [Setup Complete](#-setup-complete)
+10. [Troubleshooting](#-troubleshooting)
+11. [Setup Complete](#-setup-complete)
 
 ---
 
@@ -137,11 +138,17 @@ You will now see three connection options.
 
 ## Which Connection Type Should You Use?
 
+### 🔵 Session Pooler — Recommended
+
+**Use Session Pooler.** It connects over IPv4 and works reliably across virtually all environments — home networks, offices, and most cloud providers.
+
+---
+
 ### 🟢 Direct Connection
 
-Use **Direct Connection** if your environment has **IPv6 connectivity**.
-
-Many hosting providers (such as Render) support IPv6, so this is typically the recommended option for deployed applications.
+> **⚠️ Not recommended for most setups.**
+>
+> Direct Connection requires **IPv6 connectivity**, which many home networks and ISPs do not support. Even if it appears to work initially, it can fail intermittently depending on your network. Stick with Session Pooler unless you have a specific reason to use Direct Connection and have confirmed your environment supports IPv6.
 
 ---
 
@@ -151,21 +158,15 @@ This is **not needed** for this project's use case.
 
 Ignore this option.
 
----
-
-### 🔵 Session Pooler
-
-Use **Session Pooler** if your environment only has **IPv4 connectivity**.
-
-Many home internet connections and some networks may require this option if IPv6 is unavailable.
-
 ![Connection Types](../images/supabase_6.png)
 
 ---
 
 ## Copy Your Connection String
 
-Scroll down until you see the PostgreSQL connection string.
+Scroll down until you see the PostgreSQL connection string for whichever connection type you selected.
+
+> **📝 Note:** The example below uses a **Direct Connection** string. Your string will look slightly different depending on your chosen connection type — the host and port will vary. Use whichever type you selected above; **Session Pooler is preferred** for most setups.
 
 It will look similar to:
 
@@ -182,6 +183,14 @@ Now replace:
 ```
 
 with the database password you created earlier.
+
+> **⚡ Important — asyncpg Driver**
+>
+> This app runs on **FastAPI** with async database access, so it requires the **asyncpg** driver instead of the default psycopg2. After copying your connection string, change the scheme from `postgresql://` to `postgresql+asyncpg://`.
+>
+> ```text
+> postgresql+asyncpg://postgres:[YOUR-PASSWORD]@db.xxxxxxxxx.supabase.co:5432/postgres
+> ```
 
 ---
 
@@ -238,13 +247,39 @@ DATABASE_URL=""
 
 Paste your completed connection string inside the quotes.
 
+> **⚡ Remember the asyncpg driver:** Use `postgresql+asyncpg://` as the scheme, not plain `postgresql://`. The app uses FastAPI with async database access and requires asyncpg instead of the default psycopg2 driver.
+
 Example:
 
 ```env
-DATABASE_URL="postgresql://postgres:YourEncodedPassword@db.xxxxxxxxx.supabase.co:5432/postgres"
+DATABASE_URL="postgresql+asyncpg://postgres:YourEncodedPassword@db.xxxxxxxxx.supabase.co:5432/postgres"
 ```
 
 Save the file.
+
+---
+
+# 🛠️ Troubleshooting
+
+## `getaddrinfo failed` on Startup
+
+If the app fails to start with an error like this:
+
+```
+socket.gaierror: [Errno 11001] getaddrinfo failed
+ERROR:    Application startup failed. Exiting.
+```
+
+This means the **Direct Connection** string is not reachable from your environment. Direct Connection uses IPv6, which many home networks and some ISPs do not support.
+
+**Fix:** Switch to the **Session Pooler** connection string instead.
+
+1. Go back to your Supabase dashboard and click **Connect**.
+2. Select **Session Pooler** from the connection options.
+3. Copy that connection string, apply your encoded password, and update `postgresql://` to `postgresql+asyncpg://` as before.
+4. Paste it into your `.env` file and restart the app.
+
+The Session Pooler connects over IPv4 and works on most home and office networks.
 
 ---
 
