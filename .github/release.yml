@@ -1,0 +1,75 @@
+# .github/release.yml
+# Customizes GitHub's automatically generated release notes for the VoucherBot project.
+# See: https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+#
+# This file is consumed by the `softprops/action-gh-release` action in
+# .github/workflows/release.yml when `generate_release_notes: true` is set.
+# The categories below determine how pull requests are grouped in the release
+# body based on their GitHub labels.
+
+changelog:
+
+  # ── Categories ──────────────────────────────────────────────────────────
+  # Each entry defines a section heading and the set of labels that place a
+  # pull request into that section. A PR must match at least one label in the
+  # list to be included under the heading. The first matching category wins.
+  #
+  # If a PR does not match any category it appears under a generic
+  # "Other Changes" heading.
+
+  categories:
+
+    - title: 🚀 Features
+      labels:
+        - enhancement
+        - feature
+        - new-source          # New data sources are treated as features
+
+    - title: 🐛 Bug Fixes
+      labels:
+        - bug
+        - fix
+
+    - title: 📚 Documentation
+      labels:
+        - documentation
+        - docs
+
+    - title: ⚡ Performance
+      labels:
+        - performance
+
+    - title: 🔒 Security
+      labels:
+        - security
+
+    - title: 📦 Dependencies
+      labels:
+        - dependencies
+
+    - title: 🧹 Maintenance
+      labels:
+        - chore
+        - refactor
+        - ci
+
+  # ── Exclusions ──────────────────────────────────────────────────────────
+  # Pull requests carrying any of these labels are omitted from the release
+  # notes entirely.
+
+  exclude:
+
+    labels:
+      - skip-changelog
+      - duplicate
+      - invalid
+      - wontfix
+
+  # ── Contributor Exclusions ──────────────────────────────────────────────
+  # Authors listed here are not credited individually in the "New Contributors"
+  # section. The github-actions bot is excluded to avoid crediting automated
+  # dependency bumps to a non-human account.
+
+  contributors:
+    exclude:
+      - github-actions[bot]

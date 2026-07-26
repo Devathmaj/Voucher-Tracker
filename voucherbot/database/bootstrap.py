@@ -7,13 +7,17 @@ config, so adding feeds/pages does not require a schema migration.
 
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+from typing import Any, Awaitable, Callable
 
 import structlog
-from sqlalchemy import update
+from sqlalchemy import text, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from voucherbot.database.connection import AsyncSessionLocal
+from voucherbot.config.settings import settings
+from voucherbot.database.connection import AsyncSessionLocal, session_scope
 from voucherbot.models.keyword import Keyword
 from voucherbot.models.source import Source, SourceType
 from voucherbot.models.vendor_mapping import VendorMapping
@@ -540,11 +544,13 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
     ),
     _feed(
         "The Register",
-        "https://www.theregister.com/headlines.atom",
+        "https://www.theregister.com/headlines.rss",
         SourceType.RSS,
         vendor="The Register",
         priority_tier="C",
         priority=2,
+        unsupported=True,
+        unsupported_reason='Serves Proof-of-Work challenge ("Are we human?") instead of RSS XML; anti-bot PoW cannot be solved without JavaScript.',
     ),
     _feed(
         "TechTarget AWS",
@@ -916,6 +922,28 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         },
     },
 ]
+
+
+# ── Local test source (IS_TEST=true only) ─────────────────────────────────────
+def _test_source() -> dict[str, Any]:
+    """Return the test source definition."""
+    return {
+        "name": "website:local_test",
+        "type": SourceType.WEBSITE,
+        "base_url": "http://localhost:35926/",
+        "priority": 1,
+        "priority_tier": "Z",
+        "enabled": settings.is_test,
+        "config": {
+            "url": "http://localhost:35926/",
+            "vendor": "local_test",
+            "article_selector": ".item",
+            "title_selector": "h2",
+            "link_selector": "self",
+            "query_terms": DEFAULT_QUERY_TERMS,
+            "poll_interval_minutes": 5,
+        },
+    }
 
 
 # Vendor mappings: URL patterns (checked first) and source name patterns
@@ -1369,103 +1397,293 @@ VENDOR_MAPPINGS: list[dict[str, str | None]] = [
 ]
 
 
-async def bootstrap_data() -> None:
-    """Populate sources and keywords. Safe to re-run."""
-    logger.info("Running database bootstrap")
-    async with AsyncSessionLocal() as session:
-        for kw in KEYWORDS:
-            await session.execute(
-                insert(Keyword)
-                .values(
-                    keyword=str(kw["keyword"]).lower(), score=kw["score"], enabled=True
-                )
-                .on_conflict_do_nothing(index_elements=["keyword"])
-            )
+# ── Retry helpers ──────────────────────────────────────────────────────────────
 
-        for sub in HIGH_SIGNAL_REDDIT_SUBREDDITS:
-            tier = _reddit_tier(sub)
-            cadence = _TIER_CADENCE_MINUTES[tier]
-            await session.execute(
-                insert(Source)
-                .values(
-                    name=f"reddit:{sub.lower()}",
-                    type=SourceType.REDDIT,
-                    base_url=f"https://www.reddit.com/r/{sub}",
-                    enabled=True,
-                    priority=1 if tier == "A" else 2,
-                    priority_tier=tier,
-                    config={
-                        "subreddit": sub,
-                        "query_terms": DEFAULT_QUERY_TERMS,
-                        "poll_interval_minutes": cadence,
-                        "auth_mode": "praw_or_rss",
-                    },
-                )
-                .on_conflict_do_nothing(index_elements=["name"])
-            )
+# Advisory lock ID (arbitrary unique integer for pg_try_advisory_lock).
+_BOOTSTRAP_LOCK_ID = 0xB0075D1A
+# Maximum transient-DB-error retry attempts.
+_MAX_RETRIES = 5
+# Base delay in seconds for exponential backoff (1, 2, 4, 8, 16).
+_BASE_DELAY_S = 1.0
+# Commit after this many source upserts to keep individual transactions small.
+_BATCH_SIZE = 25
 
-        for source in SOURCE_DEFINITIONS:
-            enabled = source.get("enabled", True)
-            await session.execute(
-                insert(Source)
+
+def _is_transient(error: Exception) -> bool:
+    """Return True when *error* is a transient DB failure worth retrying.
+
+    Never retry IntegrityError (constraint violation == idempotency bug).
+    For DBAPIError, walk the full ``__cause__`` chain looking for known
+    transient asyncpg exception types:
+      - ConnectionDoesNotExistError  (connection dropped mid-operation)
+      - QueryCanceledError           (statement timeout — retry with backoff)
+      - InterfaceError               (client-side connection issue)
+
+    The cause chain from SQLAlchemy is::
+
+        DBAPIError
+          └─ __cause__ → AsyncAdapt_asyncpg_dbapi.Error
+                           └─ __cause__ → asyncpg.exceptions.*Error
+
+    """
+    if isinstance(error, IntegrityError):
+        return False
+    if not isinstance(error, DBAPIError):
+        return False
+    from asyncpg.exceptions import (  # type: ignore[import-untyped]
+        ConnectionDoesNotExistError as _CDNE,
+        InterfaceError as _IE,
+        QueryCanceledError as _QCE,
+    )
+
+    _TRANSIENT = (_CDNE, _QCE, _IE)
+    cause: BaseException | None = error
+    while cause is not None:
+        if isinstance(cause, _TRANSIENT):
+            return True
+        cause = cause.__cause__
+    return True  # non-IntegrityError with no known cause is assumed transient
+
+
+async def _run_with_retry(fn: Callable[[], Awaitable[Any]]) -> Any:
+    """Execute *fn* with exponential-backoff retry for transient DB errors.
+
+    Retries up to ``_MAX_RETRIES`` times with delays: 1, 2, 4, 8, 16 s.
+    IntegrityError is never retried.  All other exceptions are raised
+    immediately on the final attempt.
+    """
+    last_exc = None
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            return await fn()
+        except IntegrityError:
+            raise
+        except DBAPIError as e:
+            if not _is_transient(e) or attempt == _MAX_RETRIES:
+                raise
+            last_exc = e
+            delay = _BASE_DELAY_S * (2 ** (attempt - 1))
+            logger.warning(
+                "bootstrap: transient DB error, retrying",
+                attempt=attempt,
+                max_retries=_MAX_RETRIES,
+                delay_seconds=round(delay, 1),
+                error=str(e)[:200],
+            )
+            await asyncio.sleep(delay)
+    assert last_exc is not None
+    raise last_exc
+
+
+async def _run_batch(
+    label: str, fn: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any
+) -> None:
+    """Execute a bootstrap batch inside its own session, with retry.
+
+    Each batch gets a fresh connection so no aborted transaction can leak
+    between logical groups.  Transient errors are retried; all others
+    propagate up and fail the bootstrap.
+    """
+    logger.info("bootstrap: batch starting", batch=label)
+
+    async def _execute() -> None:
+        async with session_scope() as session:
+            await fn(session, *args, **kwargs)
+
+    await _run_with_retry(_execute)
+    logger.info("bootstrap: batch complete", batch=label)
+
+
+# ── Batch seed functions ──────────────────────────────────────────────────────
+
+
+async def _seed_keywords(db: AsyncSession) -> None:
+    """Upsert keyword-scoring rows."""
+    for kw in KEYWORDS:
+        await db.execute(
+            insert(Keyword)
+            .values(
+                keyword=str(kw["keyword"]).lower(),
+                score=kw["score"],
+                enabled=True,
+            )
+            .on_conflict_do_nothing(index_elements=["keyword"]),
+        )
+    await db.commit()
+
+
+async def _seed_reddit_sources(db: AsyncSession) -> None:
+    """Upsert Reddit subreddit sources."""
+    for sub in HIGH_SIGNAL_REDDIT_SUBREDDITS:
+        tier = _reddit_tier(sub)
+        cadence = _TIER_CADENCE_MINUTES[tier]
+        await db.execute(
+            insert(Source)
+            .values(
+                name=f"reddit:{sub.lower()}",
+                type=SourceType.REDDIT,
+                base_url=f"https://www.reddit.com/r/{sub}",
+                enabled=True,
+                priority=1 if tier == "A" else 2,
+                priority_tier=tier,
+                config={
+                    "subreddit": sub,
+                    "query_terms": DEFAULT_QUERY_TERMS,
+                    "poll_interval_minutes": cadence,
+                    "auth_mode": "praw_or_rss",
+                },
+            )
+            .on_conflict_do_nothing(index_elements=["name"]),
+        )
+    await db.commit()
+
+
+async def _seed_sources(db: AsyncSession) -> None:
+    """Upsert all non-Reddit sources, committing every _BATCH_SIZE.
+
+    The sub-batch commit keeps each individual transaction small enough to
+    avoid PostgreSQL ``statement_timeout`` even when the catalog grows.
+    """
+    test_source = _test_source()
+    sources_to_seed = [*SOURCE_DEFINITIONS, test_source]
+
+    total = len(sources_to_seed)
+    for i, source in enumerate(sources_to_seed):
+        enabled = source.get("enabled", True)
+        logger.info(
+            "bootstrap: upserting source",
+            source=source["name"],
+            index=i + 1,
+            total=total,
+            enabled=enabled,
+        )
+        await db.execute(
+            insert(Source)
+            .values(
+                name=source["name"],
+                type=source["type"],
+                base_url=source["base_url"],
+                enabled=enabled,
+                priority=source.get("priority", 1),
+                priority_tier=source.get("priority_tier", "C"),
+                config=source["config"],
+            )
+            .on_conflict_do_update(
+                index_elements=["name"],
+                set_={
+                    "type": source["type"],
+                    "base_url": source["base_url"],
+                    "enabled": enabled,
+                    "priority": source.get("priority", 1),
+                    "priority_tier": source.get("priority_tier", "C"),
+                    "config": source["config"],
+                },
+            ),
+        )
+
+        if (i + 1) % _BATCH_SIZE == 0:
+            logger.info(
+                "bootstrap: committing source sub-batch",
+                count=i + 1,
+                total=total,
+            )
+            await db.commit()
+            await db.execute(text("SET statement_timeout = '120000'"))
+
+    await db.commit()
+
+
+async def _seed_vendor_mappings(db: AsyncSession) -> None:
+    """Upsert vendor-mapping rows (URL prefix then source-name fallback)."""
+    for mapping in VENDOR_MAPPINGS:
+        if mapping.get("url_pattern"):
+            stmt = (
+                insert(VendorMapping)
                 .values(
-                    name=source["name"],
-                    type=source["type"],
-                    base_url=source["base_url"],
-                    enabled=enabled,
-                    priority=source.get("priority", 1),
-                    priority_tier=source.get("priority_tier", "C"),
-                    config=source["config"],
+                    url_pattern=mapping["url_pattern"],
+                    source_name_pattern=None,
+                    vendor=mapping["vendor"],
                 )
                 .on_conflict_do_update(
-                    index_elements=["name"],
-                    set_={
-                        "type": source["type"],
-                        "base_url": source["base_url"],
-                        "enabled": enabled,
-                        "priority": source.get("priority", 1),
-                        "priority_tier": source.get("priority_tier", "C"),
-                        "config": source["config"],
-                    },
+                    index_elements=["url_pattern"],
+                    set_={"vendor": mapping["vendor"]},
                 )
             )
-
-        for mapping in VENDOR_MAPPINGS:
-            if mapping.get("url_pattern"):
-                stmt = (
-                    insert(VendorMapping)
-                    .values(
-                        url_pattern=mapping["url_pattern"],
-                        source_name_pattern=None,
-                        vendor=mapping["vendor"],
-                    )
-                    .on_conflict_do_update(
-                        index_elements=["url_pattern"],
-                        set_={"vendor": mapping["vendor"]},
-                    )
+        else:
+            stmt = (
+                insert(VendorMapping)
+                .values(
+                    url_pattern=None,
+                    source_name_pattern=mapping["source_name_pattern"],
+                    vendor=mapping["vendor"],
                 )
-            else:
-                stmt = (
-                    insert(VendorMapping)
-                    .values(
-                        url_pattern=None,
-                        source_name_pattern=mapping["source_name_pattern"],
-                        vendor=mapping["vendor"],
-                    )
-                    .on_conflict_do_update(
-                        index_elements=["source_name_pattern"],
-                        set_={"vendor": mapping["vendor"]},
-                    )
+                .on_conflict_do_update(
+                    index_elements=["source_name_pattern"],
+                    set_={"vendor": mapping["vendor"]},
                 )
-            await session.execute(stmt)
+            )
+        await db.execute(stmt)
+    await db.commit()
 
-        for sub in DISABLED_REDDIT_SUBREDDITS:
-            await session.execute(
-                update(Source)
-                .where(Source.name == f"reddit:{sub.lower()}")
-                .values(enabled=False)
+
+async def _disable_reddit_sources(db: AsyncSession) -> None:
+    """Mark noisy subreddits as disabled."""
+    for sub in DISABLED_REDDIT_SUBREDDITS:
+        await db.execute(
+            update(Source)
+            .where(Source.name == f"reddit:{sub.lower()}")
+            .values(enabled=False),
+        )
+    await db.commit()
+
+
+# ── Main entry point ──────────────────────────────────────────────────────────
+
+
+async def bootstrap_data() -> None:
+    """Populate database with seed data.
+
+    Safe to re-run (all writes use ``ON CONFLICT`` upsert semantics).
+    Each logical batch is committed independently so a failure in one group
+    does not roll back work already persisted.
+
+    Resiliency properties
+    ---------------------
+    * Advisory lock — prevents concurrent bootstrap across app instances.
+    * Per-batch sessions — no stale transaction can leak between groups.
+    * Sub-batch commits — source upserts are flushed every ``_BATCH_SIZE``
+      rows to avoid ``statement_timeout`` on large catalogs.
+    * Exponential-backoff retry — transient errors (connection drops,
+      query cancellation, interface errors) are retried up to 5 times.
+      ``IntegrityError`` is **never** retried.
+    * Structured logging — every batch and every source upsert is logged
+      so the exact failing row is visible in production.
+    """
+    logger.info("bootstrap: starting data seed")
+
+    # Acquire a session-level advisory lock so multiple app instances
+    # (e.g. during a rolling deploy) do not run bootstrap simultaneously.
+    async with AsyncSessionLocal() as lock_session:
+        result = await lock_session.execute(
+            text("SELECT pg_try_advisory_lock(:lock_id)"),
+            {"lock_id": _BOOTSTRAP_LOCK_ID},
+        )
+        if not result.scalar_one():
+            logger.warning(
+                "bootstrap: advisory lock held by another instance, skipping",
+            )
+            return
+
+        try:
+            await _run_batch("keywords", _seed_keywords)
+            await _run_batch("reddit_sources", _seed_reddit_sources)
+            await _run_batch("sources", _seed_sources)
+            await _run_batch("vendor_mappings", _seed_vendor_mappings)
+            await _run_batch("disable_sources", _disable_reddit_sources)
+        finally:
+            await lock_session.execute(
+                text("SELECT pg_advisory_unlock(:lock_id)"),
+                {"lock_id": _BOOTSTRAP_LOCK_ID},
             )
 
-        await session.commit()
-
-    logger.info("Database bootstrap complete")
+    logger.info("bootstrap: complete")

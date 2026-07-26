@@ -55,6 +55,12 @@ class WebsiteCollector(BaseCollector):
         except RobotsDisallowedError:
             logger.info("WebsiteCollector: skipped (robots.txt)", url=url)
             return []
+        except ConnectionRefusedError:
+            logger.warning(
+                "WebsiteCollector: local server not running",
+                url=url,
+            )
+            return []
         except Exception as e:
             logger.error("WebsiteCollector: HTTP error", url=url, error=str(e))
             return []

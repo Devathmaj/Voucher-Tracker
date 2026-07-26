@@ -3,12 +3,12 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 import structlog
 
-from sqlalchemy import update
+from sqlalchemy import or_, update
 
 from voucherbot.api.routers import health, sources, posts, alerts
 from voucherbot.config.settings import settings
 from voucherbot.core.logging import setup_logging
-from voucherbot.database.connection import AsyncSessionLocal
+from voucherbot.database.connection import session_scope
 from voucherbot.models.source import Source
 from voucherbot.services.dispatcher import reset_lease
 from voucherbot.services.scheduler import start_scheduler, stop_scheduler
@@ -31,14 +31,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         await logger.ainfo("Skipping DB init/bootstrap (IS_PROD=true)")
 
-    async with AsyncSessionLocal() as session:
+    async with session_scope() as session:
         await session.execute(
-            update(Source).values(next_due_at=None, backoff_until=None)
+            update(Source)
+            .where(
+                or_(
+                    Source.next_due_at.is_not(None),
+                    Source.backoff_until.is_not(None),
+                )
+            )
+            .values(next_due_at=None, backoff_until=None)
         )
         await session.commit()
     await logger.ainfo("scheduler: all sources reset to due")
 
-    async with AsyncSessionLocal() as session:
+    async with session_scope() as session:
         await reset_lease(session)
     await logger.ainfo("dispatcher: lease reset on startup")
 
