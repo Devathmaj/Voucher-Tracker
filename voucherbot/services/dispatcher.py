@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import DBAPIError
 
 from voucherbot.config.settings import settings
-from voucherbot.database.connection import AsyncSessionLocal
+from voucherbot.database.connection import session_scope
 from voucherbot.models.source import Source, SourceType
 from voucherbot.providers.base import BaseCollector
 from voucherbot.services.ingestion.pipeline import run_pipeline_for_source
@@ -297,7 +297,7 @@ async def _with_fresh_session(
 ) -> None:
     """Run *callback(*args, **kwargs) inside a fresh session, swallowing DB errors."""
     try:
-        async with AsyncSessionLocal() as fresh:
+        async with session_scope() as fresh:
             await callback(fresh, *args, **kwargs)
     except Exception as e:
         logger.warning(
@@ -398,7 +398,7 @@ async def dispatch_tick(
                     "retrying with fresh session",
                     source=source_name,
                 )
-                async with AsyncSessionLocal() as fresh:
+                async with session_scope() as fresh:
                     try:
                         if _is_unrecoverable(exc):
                             await _mark_unrecoverable(fresh, source, str(exc))

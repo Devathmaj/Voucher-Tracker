@@ -17,7 +17,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from voucherbot.config.settings import settings
-from voucherbot.database.connection import AsyncSessionLocal
+from voucherbot.database.connection import AsyncSessionLocal, session_scope
 from voucherbot.models.keyword import Keyword
 from voucherbot.models.source import Source, SourceType
 from voucherbot.models.vendor_mapping import VendorMapping
@@ -549,6 +549,8 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         vendor="The Register",
         priority_tier="C",
         priority=2,
+        unsupported=True,
+        unsupported_reason="Serves Proof-of-Work challenge (\"Are we human?\") instead of RSS XML; anti-bot PoW cannot be solved without JavaScript.",
     ),
     _feed(
         "TechTarget AWS",
@@ -1409,26 +1411,35 @@ def _is_transient(error: Exception) -> bool:
     """Return True when *error* is a transient DB failure worth retrying.
 
     Never retry IntegrityError (constraint violation == idempotency bug).
-    For DBAPIError, unwrap the asyncpg cause and check against known
-    transient exception types:
+    For DBAPIError, walk the full ``__cause__`` chain looking for known
+    transient asyncpg exception types:
       - ConnectionDoesNotExistError  (connection dropped mid-operation)
       - QueryCanceledError           (statement timeout — retry with backoff)
       - InterfaceError               (client-side connection issue)
+
+    The cause chain from SQLAlchemy is::
+
+        DBAPIError
+          └─ __cause__ → AsyncAdapt_asyncpg_dbapi.Error
+                           └─ __cause__ → asyncpg.exceptions.*Error
 
     """
     if isinstance(error, IntegrityError):
         return False
     if not isinstance(error, DBAPIError):
         return False
-    cause = error.__cause__
-    if cause is None:
-        return True
     from asyncpg.exceptions import (
         ConnectionDoesNotExistError as _CDNE,
         InterfaceError as _IE,
         QueryCanceledError as _QCE,
     )
-    return isinstance(cause, (_CDNE, _QCE, _IE))
+    _TRANSIENT = (_CDNE, _QCE, _IE)
+    cause = error
+    while cause is not None:
+        if isinstance(cause, _TRANSIENT):
+            return True
+        cause = cause.__cause__
+    return True  # non-IntegrityError with no known cause is assumed transient
 
 
 async def _run_with_retry(fn):
@@ -1470,7 +1481,7 @@ async def _run_batch(label: str, fn, *args, **kwargs) -> None:
     logger.info("bootstrap: batch starting", batch=label)
 
     async def _execute():
-        async with AsyncSessionLocal() as session:
+        async with session_scope() as session:
             await fn(session, *args, **kwargs)
 
     await _run_with_retry(_execute)
@@ -1571,6 +1582,7 @@ async def _seed_sources(db: AsyncSession) -> None:
                 total=total,
             )
             await db.commit()
+            await db.execute(text("SET statement_timeout = '120000'"))
 
     await db.commit()
 

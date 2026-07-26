@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 import structlog
 from sqlalchemy import or_, select
 
-from voucherbot.database.connection import AsyncSessionLocal
+from voucherbot.database.connection import session_scope
 from voucherbot.models.source import Source
 from voucherbot.providers.reddit.client import RedditClient
 from voucherbot.providers.reddit.collector import RedditCollector
@@ -55,7 +55,7 @@ async def _seconds_until_next_due() -> float:
     from voucherbot.models.source import SourceType
 
     now = datetime.now(timezone.utc)
-    async with AsyncSessionLocal() as session:
+    async with session_scope() as session:
         stmt = (
             select(Source.next_due_at)
             .where(
@@ -98,7 +98,7 @@ async def _run_sweep() -> int:
     _MAX_BUSY_RETRIES = 120
     while True:
         holder_id = str(uuid.uuid4())[:8]
-        async with AsyncSessionLocal() as session:
+        async with session_scope() as session:
             result = await dispatch_tick(session, _collectors, holder_id)
         status = result.get("status")
         if status == "ran":
