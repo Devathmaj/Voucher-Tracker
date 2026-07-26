@@ -1475,7 +1475,9 @@ async def _run_with_retry(fn: Callable[[], Awaitable[Any]]) -> Any:
     raise last_exc
 
 
-async def _run_batch(label: str, fn: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any) -> None:
+async def _run_batch(
+    label: str, fn: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any
+) -> None:
     """Execute a bootstrap batch inside its own session, with retry.
 
     Each batch gets a fresh connection so no aborted transaction can leak
