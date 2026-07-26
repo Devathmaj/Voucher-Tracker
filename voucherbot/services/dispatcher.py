@@ -317,7 +317,9 @@ async def _safe_release_lease(session: AsyncSession | None) -> bool:
             await _release_lease(session)
             return True
         except DBAPIError:
-            logger.warning("dispatcher: session broken, releasing lease with fresh session")
+            logger.warning(
+                "dispatcher: session broken, releasing lease with fresh session"
+            )
 
     await _with_fresh_session("release_lease", _release_lease)
     return False

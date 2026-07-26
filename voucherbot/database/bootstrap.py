@@ -8,7 +8,7 @@ config, so adding feeds/pages does not require a schema migration.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 import structlog
 from sqlalchemy import text, update
@@ -550,7 +550,7 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
         priority_tier="C",
         priority=2,
         unsupported=True,
-        unsupported_reason="Serves Proof-of-Work challenge (\"Are we human?\") instead of RSS XML; anti-bot PoW cannot be solved without JavaScript.",
+        unsupported_reason='Serves Proof-of-Work challenge ("Are we human?") instead of RSS XML; anti-bot PoW cannot be solved without JavaScript.',
     ),
     _feed(
         "TechTarget AWS",
@@ -923,6 +923,7 @@ SOURCE_DEFINITIONS: list[dict[str, Any]] = [
     },
 ]
 
+
 # ── Local test source (IS_TEST=true only) ─────────────────────────────────────
 def _test_source() -> dict[str, Any]:
     """Return the test source definition."""
@@ -943,6 +944,7 @@ def _test_source() -> dict[str, Any]:
             "poll_interval_minutes": 5,
         },
     }
+
 
 # Vendor mappings: URL patterns (checked first) and source name patterns
 # (fallback).  Maps known official sources to their canonical vendor name.
@@ -1428,13 +1430,14 @@ def _is_transient(error: Exception) -> bool:
         return False
     if not isinstance(error, DBAPIError):
         return False
-    from asyncpg.exceptions import (
+    from asyncpg.exceptions import (  # type: ignore[import-untyped]
         ConnectionDoesNotExistError as _CDNE,
         InterfaceError as _IE,
         QueryCanceledError as _QCE,
     )
+
     _TRANSIENT = (_CDNE, _QCE, _IE)
-    cause = error
+    cause: BaseException | None = error
     while cause is not None:
         if isinstance(cause, _TRANSIENT):
             return True
@@ -1442,7 +1445,7 @@ def _is_transient(error: Exception) -> bool:
     return True  # non-IntegrityError with no known cause is assumed transient
 
 
-async def _run_with_retry(fn):
+async def _run_with_retry(fn: Callable[[], Awaitable[Any]]) -> Any:
     """Execute *fn* with exponential-backoff retry for transient DB errors.
 
     Retries up to ``_MAX_RETRIES`` times with delays: 1, 2, 4, 8, 16 s.
@@ -1468,10 +1471,11 @@ async def _run_with_retry(fn):
                 error=str(e)[:200],
             )
             await asyncio.sleep(delay)
-    raise last_exc  # keep type-checkers / linters happy
+    assert last_exc is not None
+    raise last_exc
 
 
-async def _run_batch(label: str, fn, *args, **kwargs) -> None:
+async def _run_batch(label: str, fn: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any) -> None:
     """Execute a bootstrap batch inside its own session, with retry.
 
     Each batch gets a fresh connection so no aborted transaction can leak
@@ -1480,7 +1484,7 @@ async def _run_batch(label: str, fn, *args, **kwargs) -> None:
     """
     logger.info("bootstrap: batch starting", batch=label)
 
-    async def _execute():
+    async def _execute() -> None:
         async with session_scope() as session:
             await fn(session, *args, **kwargs)
 

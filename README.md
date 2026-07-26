@@ -52,6 +52,8 @@ Follow the steps below to deploy the project.
 
 🎉 **Voilà!** Your app is now up and running. VoucherBot will continuously monitor your configured sources in the background and automatically deliver any certification vouchers it finds straight to your email — no manual checking required.
 
+> ⚠️ **Shutdown safely.** VoucherBot runs a background scheduler that acquires a PostgreSQL advisory lock while processing sources. If you kill the app (Ctrl+C / SIGKILL / Render restart) while a source is mid-flight, the lock can be orphaned and connections can be left in a broken state, causing `QueryCanceledError` or `ConnectionDoesNotExistError` on the next startup. **Always wait for the scheduler to finish its current task and enter the sleep phase** before shutting down. A graceful stop (Ctrl+C once) lets the running task complete before the process exits. If you see lock-related errors after an unclean shutdown, restarting the app once clears them automatically.
+
 ---
 
 ## 🛠️ Environment Setup Guides

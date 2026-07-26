@@ -154,9 +154,121 @@ To run the complete test suite successfully, populate the Reddit configuration v
 
 Without Reddit credentials, all other tests should still pass successfully.
 
+
+## 🧪 Testing the AI Voucher Parser End-to-End
+
+The project includes a **local test source** that lets you verify the full pipeline — scraping, keyword filtering, AI extraction, and notification — without relying on real external feeds.
+
+### 1. Configure the Environment
+
+Set the following in your `.env` file:
+
+```env
+IS_TEST=true
+IS_PROD=false
+```
+
+- `IS_TEST=true` — seeds a `website:local_test` source pointing at `http://localhost:35926/` (see `voucherbot/database/bootstrap.py:928-945`)
+- `IS_PROD=false` — the app creates tables and runs bootstrap on startup
+
+### 2. Start the Local Test Server
+
+The test server is a minimal HTTP server at `D:\components\server.py` that serves:
+
+| Route | Content |
+|-------|---------|
+| `GET /` | `index.html` — scraped by the WebsiteCollector |
+| `GET /api/items` | `items.json` — test data payload |
+| `POST /api/items` | Update test data |
+
+**Start it from the `D:\components\` directory:**
+
+```powershell
+cd D:\components
+python server.py
+```
+
+The server listens on `http://localhost:35926/`.
+
+### 3. How the Scraper Works
+
+The test source is defined at **`voucherbot/database/bootstrap.py:928-945`**:
+
+```python
+"config": {
+    "url": "http://localhost:35926/",
+    "vendor": "local_test",
+    "article_selector": ".item",     # each item <div>
+    "title_selector": "h2",          # title inside .item
+    "link_selector": "self",         # no link extraction
+    "query_terms": [...],            # keywords for filtering
+    "poll_interval_minutes": 5,
+}
+```
+
+The `WebsiteCollector` (`voucherbot/providers/website/collector.py:37-41`) reads these selectors and scrapes the page using BeautifulSoup.
+
+The `index.html` at `D:\components\index.html` contains `.item` divs with `<h2>` titles — this structure matches the default selectors. **To test different content, edit the HTML or the selectors.**
+
+### 4. Customising Test Data
+
+Edit **`D:\components\items.json`** to control what the API returns. Default content:
+
+```json
+[
+  {
+    "title": "free voucher",
+    "description": "free test voucher for localhost"
+  }
+]
+```
+
+The scraper parses the rendered HTML page (`/`), *not* the JSON API directly. The API is available if you want to build dynamic test pages.
+
+### 5. Running the Test
+
+Start the main app (keep the test server running in another terminal):
+
+```powershell
+uvicorn voucherbot.main:app --host 0.0.0.0 --port 9000
+```
+
+On startup the app:
+
+1. Creates tables and seeds data (including the `website:local_test` source)
+2. The scheduler picks up the source and runs the pipeline
+3. The `WebsiteCollector` fetches `http://localhost:35926/` and extracts `.item` elements
+4. Keyword filtering scores each post against your `query_terms`
+5. AI extraction analyses matching posts
+6. If a voucher is detected, a notification is sent
+
+### 6. Watching the Pipeline
+
+Monitor the server logs. A successful test run produces output like:
+
+```
+WebsiteCollector: fetching       url=http://localhost:35926/
+WebsiteCollector: collected      url=http://localhost:35926/  count=1
+pipeline: keyword filter         fetched=1 filtered=0 passed=1  source=website:local_test
+pipeline: AI analysis            posts=1 ...
+dispatcher: tick ran             source=website:local_test  ...
+```
+
+### 7. Modifying Scraping Behaviour
+
+To change how the test page is parsed, edit:
+
+| File | Lines | What to change |
+|------|-------|----------------|
+| `voucherbot/database/bootstrap.py` | 928-945 | Source config (`article_selector`, `title_selector`, `link_selector`, `query_terms`) |
+| `voucherbot/providers/website/collector.py` | 37-41 | Default selector fallbacks |
+| `voucherbot/config/settings.py` | 68 | `is_test` setting |
+
+After changing source config, restart the app so bootstrap re-upserts the source.
+
 ---
 
-## 🔧 Troubleshooting
+### 🔧 Troubleshooting
 
 ### `pytest: command not found`
 
