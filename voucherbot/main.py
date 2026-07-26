@@ -3,7 +3,7 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 import structlog
 
-from sqlalchemy import update
+from sqlalchemy import or_, update
 
 from voucherbot.api.routers import health, sources, posts, alerts
 from voucherbot.config.settings import settings
@@ -33,7 +33,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     async with AsyncSessionLocal() as session:
         await session.execute(
-            update(Source).values(next_due_at=None, backoff_until=None)
+            update(Source)
+            .where(
+                or_(
+                    Source.next_due_at.is_not(None),
+                    Source.backoff_until.is_not(None),
+                )
+            )
+            .values(next_due_at=None, backoff_until=None)
         )
         await session.commit()
     await logger.ainfo("scheduler: all sources reset to due")

@@ -14,7 +14,10 @@ import structlog
 from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy.exc import DBAPIError
+
 from voucherbot.config.settings import settings
+from voucherbot.database.connection import AsyncSessionLocal
 from voucherbot.models.source import Source, SourceType
 from voucherbot.providers.base import BaseCollector
 from voucherbot.services.ingestion.pipeline import run_pipeline_for_source
@@ -286,6 +289,40 @@ async def _mark_unrecoverable(
     await session.commit()
 
 
+async def _with_fresh_session(
+    action: str,
+    callback: Any,
+    *args: Any,
+    **kwargs: Any,
+) -> None:
+    """Run *callback(*args, **kwargs) inside a fresh session, swallowing DB errors."""
+    try:
+        async with AsyncSessionLocal() as fresh:
+            await callback(fresh, *args, **kwargs)
+    except Exception as e:
+        logger.warning(
+            "dispatcher: fresh session fallback failed",
+            action=action,
+            error=str(e)[:160],
+        )
+
+
+async def _safe_release_lease(session: AsyncSession | None) -> bool:
+    """Release the lease on *session*, or with a fresh session if broken.
+    Returns True if the lease was released successfully.
+    """
+    if session is not None:
+        try:
+            await session.rollback()
+            await _release_lease(session)
+            return True
+        except DBAPIError:
+            logger.warning("dispatcher: session broken, releasing lease with fresh session")
+
+    await _with_fresh_session("release_lease", _release_lease)
+    return False
+
+
 async def dispatch_tick(
     session: AsyncSession,
     collectors: dict[str, BaseCollector],
@@ -322,6 +359,10 @@ async def dispatch_tick(
                     stats = await run_pipeline_for_source(session, source, collectors)
             else:
                 stats = await run_pipeline_for_source(session, source, collectors)
+            # Pipeline's db.commit() expires the source ORM instance.
+            # Refresh before _mark_success reads source.config / source.avg_runtime_ms
+            # to avoid the "greenlet_spawn has not been called" error.
+            await session.refresh(source)
             elapsed_ms = int(
                 (datetime.now(timezone.utc) - start).total_seconds() * 1000
             )
@@ -342,15 +383,33 @@ async def dispatch_tick(
             elapsed_ms = int(
                 (datetime.now(timezone.utc) - start).total_seconds() * 1000
             )
-            await session.rollback()
-            if _is_unrecoverable(exc):
-                await _mark_unrecoverable(session, source, str(exc))
-                return {
-                    "status": "skipped",
-                    "source": source_name,
-                    "reason": str(exc)[:120],
-                }
-            await _mark_failure(session, failure_source, elapsed_ms)
+            try:
+                await session.rollback()
+            except DBAPIError:
+                pass
+            try:
+                if _is_unrecoverable(exc):
+                    await _mark_unrecoverable(session, source, str(exc))
+                else:
+                    await _mark_failure(session, failure_source, elapsed_ms)
+            except DBAPIError:
+                logger.warning(
+                    "dispatcher: session broken after pipeline error, "
+                    "retrying with fresh session",
+                    source=source_name,
+                )
+                async with AsyncSessionLocal() as fresh:
+                    try:
+                        if _is_unrecoverable(exc):
+                            await _mark_unrecoverable(fresh, source, str(exc))
+                        else:
+                            await _mark_failure(fresh, failure_source, elapsed_ms)
+                    except Exception as inner:
+                        logger.error(
+                            "dispatcher: fresh session fallback also failed",
+                            source=source_name,
+                            error=str(inner)[:160],
+                        )
             logger.error(
                 "dispatcher: tick failed",
                 source=source_name,
@@ -364,5 +423,4 @@ async def dispatch_tick(
                 "error": str(exc),
             }
     finally:
-        await session.rollback()
-        await _release_lease(session)
+        await _safe_release_lease(session)
