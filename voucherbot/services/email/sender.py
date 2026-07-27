@@ -40,6 +40,38 @@ def _init() -> None:
 _init()
 
 
+async def send_test_email() -> dict[str, Any] | None:
+    """
+    Send a test email to the configured EMAIL_ID to verify the Resend setup.
+
+    Returns the Resend API response dict or None on failure / if not configured.
+    """
+    if not settings.email_id:
+        logger.warning(
+            "email.sender: EMAIL_ID not set — skipping test email."
+        )
+        return None
+
+    subject = "VoucherBot — Test email"
+    html = (
+        "<div style='font-family:system-ui,sans-serif;line-height:1.45;color:#111;max-width:560px'>"
+        "<h2 style='margin:0 0 12px'>VoucherBot — Test email</h2>"
+        "<p style='margin:0 0 8px'>This is a test email from VoucherBot. "
+        "If you received this, the Resend email configuration is working correctly.</p>"
+        "</div>"
+    )
+    text = "This is a test email from VoucherBot. If you received this, the Resend email configuration is working correctly."
+
+    result = await send_email(to=settings.email_id, subject=subject, html=html, text=text)
+    if result is not None:
+        logger.info(
+            "email.sender: test email sent successfully",
+            to=settings.email_id,
+            resend_id=result.get("id"),
+        )
+    return result
+
+
 async def send_email(
     to: str | list[str],
     subject: str,

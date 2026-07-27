@@ -50,6 +50,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await logger.ainfo("dispatcher: lease reset on startup")
 
     start_scheduler()
+
+    # Send a test email to verify the Resend configuration on startup
+    from voucherbot.services.email.sender import send_test_email
+
+    await send_test_email()
+
     yield
     await stop_scheduler()
     await logger.ainfo("Shutting down VoucherBot API...")
