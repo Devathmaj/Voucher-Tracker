@@ -26,6 +26,9 @@ By the end of this guide, you will have:
 10. [Deploy Your Web Service](#step-10-deploy-your-web-service)
 11. [Monitor Your Deployment](#step-11-monitor-your-deployment)
 12. [Copy Your App URL](#step-12-copy-your-app-url)
+- [Alternate Ways to Connect Your Project](#alternate-ways-to-connect-your-project)
+  - [Connect via Public Git Repository](#alternatively--connect-via-public-git-repository)
+  - [Connect via Existing Docker Image](#alternatively--connect-via-existing-docker-image)
 - [🔁 Alternate: Blueprint Deployment](#-alternate-blueprint-deployment)
 
 ---
@@ -78,6 +81,8 @@ You'll now be taken to a page where you can configure how Render connects to you
 If you forked the repository and want to connect your own fork, click **GitHub** from the available options.
 
 > You can also use GitLab, Bitbucket, or any other supported provider.
+>
+> 💡 See [Alternate Ways to Connect Your Project](#alternate-ways-to-connect-your-project) at the bottom of this guide for other connection methods (public git repo or existing Docker image).
 
 ![Connect via GitHub](../images/render_4.png)
 
@@ -105,18 +110,6 @@ Once authenticated, your connected repositories will be listed on the page.
 Click on your forked repository to proceed with configuration.
 
 ![Select Repository](../images/render_6.png)
-
-> **Alternatively — Connect via Public Git Repository**
->
-> If you haven't forked the repo, you can connect directly to the original repository using the **Public Git Repository** option (next to the Git provider options).
->
-> ![Public Git Repository Option](../images/render_7.png)
->
-> After clicking it, type the link to the original repository in the box and Render will fetch the code from there.
->
-> ![Enter Repository URL](../images/render_8.png)
->
-> ⚠️ **Keep in mind:** This method pulls directly from the original repository, meaning any changes made to it will affect your deployment. Only choose this option if you're comfortable with that.
 
 ---
 
@@ -192,10 +185,81 @@ After your app is live, Render will provide a public URL for your deployment.
 
 ![Copy App URL](../images/render_14.png)
 
+**Your app is now live and will send you notifications about certification vouchers 🎉**
+
+
 > 🔗 **Next Step:** Set up an uptime bot to keep your app alive.
 > Follow the guide at [docs/setup/uptime-bot-setup.md](../uptime-bot-setup.md)
 
 ---
+
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+---
+
+## Alternate Ways to Connect Your Project
+
+If you'd prefer not to connect via GitHub, GitLab, or Bitbucket, you can use one of the following alternate methods instead.
+
+### Alternatively — Connect via Public Git Repository
+
+If you haven't forked the repo, you can connect directly to the original repository using the **Public Git Repository** option (next to the Git provider options).
+
+![Public Git Repository Option](../images/render_7.png)
+
+After clicking it, type the link to the original repository (https://github.com/Devathmaj/VoucherBot) in the box and Render will fetch the code from there.
+
+![Enter Repository URL](../images/render_8.png)
+
+> ⚠️ **Keep in mind:** This method pulls directly from the original repository, meaning any changes made to it will affect your deployment. Only choose this option if you're comfortable with that.
+
+After connecting via public git repository, continue with [Step 7: Configure the Web Service](#step-7-configure-the-web-service).
+
+---
+
+### Alternatively — Connect via Existing Docker Image
+
+If you'd prefer to use a pre-built Docker image instead of connecting a repository, follow these steps:
+
+1. Go to [https://github.com/Devathmaj/VoucherBot](https://github.com/Devathmaj/VoucherBot) and click **Packages** in the bottom-right sidebar.
+
+![Click Packages](../images/render_19.png)
+
+2. You'll be taken to the packages page at [https://github.com/Devathmaj/VoucherBot/pkgs/container/voucher-tracker](https://github.com/Devathmaj/VoucherBot/pkgs/container/voucher-tracker). Copy the **Install from the command line** docker command and save it somewhere.
+
+![Copy Docker Command](../images/render_20.png)
+
+3. Back in Render's **Connect Your Repository** page, click the **Existing Image** option.
+
+![Select Existing Image](../images/render_21.png)
+
+4. Paste the docker command you copied into the **Image URL** box and click **Connect**.
+
+![Connect Existing Image](../images/render_22.png)
+
+5. You'll see the **Configure the Web Service** option where you can configure variables and other settings.
+
+![Configure Web Service for Existing Image](../images/render_23.png)
+
+After connecting via existing image, continue with [Step 8: Choose an Instance Type](#step-8-choose-an-instance-type).
+
+---
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
 
 ---
 
