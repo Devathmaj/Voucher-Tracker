@@ -47,9 +47,7 @@ async def send_test_email() -> dict[str, Any] | None:
     Returns the Resend API response dict or None on failure / if not configured.
     """
     if not settings.email_id:
-        logger.warning(
-            "email.sender: EMAIL_ID not set — skipping test email."
-        )
+        logger.warning("email.sender: EMAIL_ID not set — skipping test email.")
         return None
 
     subject = "VoucherBot — Test email"
@@ -62,7 +60,9 @@ async def send_test_email() -> dict[str, Any] | None:
     )
     text = "This is a test email from VoucherBot. If you received this, the Resend email configuration is working correctly."
 
-    result = await send_email(to=settings.email_id, subject=subject, html=html, text=text)
+    result = await send_email(
+        to=settings.email_id, subject=subject, html=html, text=text
+    )
     if result is not None:
         logger.info(
             "email.sender: test email sent successfully",
